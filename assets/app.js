@@ -22,7 +22,8 @@
   const dotDate = d => `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
   const spacedDate = d => `${d.getFullYear()}. ${pad(d.getMonth() + 1)}. ${pad(d.getDate())}`;
   const koDate = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
-  const daysSince = d => { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((t - d) / 864e5) + 1; }; // 시작한 날 = D+1
+  // firstDay: 사귄 날을 몇 일로 셀지 (0 이면 사귄 날 = 0일, 1 이면 사귄 날 = 1일)
+  const daysSince = (d, firstDay = 1) => { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((t - d) / 864e5) + firstDay; };
 
   /* ---------- 암호 ---------- */
   const normalize = s => { let d = String(s || '').replace(/\D/g, ''); if (d.length === 6) d = '20' + d; return d; };
@@ -374,13 +375,14 @@
     const t = c.together || {};
     const since = t.since ? parseDate(t.since) : md;
     if (since) {
-      state.days = daysSince(since);
+      state.days = daysSince(since, t.firstDay === 0 ? 0 : 1);
       $('#counter-label').textContent = t.label || '우리가 함께한 지';
       const today = new Date();
       const bd = c.birthday ? parseDate(c.birthday) : null;
       const isBirthday = bd && today.getMonth() === bd.getMonth() && today.getDate() === bd.getDate();
-      $('#counter-sub').textContent = isBirthday
-        ? `그리고 오늘, 네 생일이 우리 ${state.days}일이야`
+      const milestone = state.days > 0 && (state.days === 30 || state.days === 50 || state.days % 100 === 0);
+      $('#counter-sub').textContent = isBirthday && t.birthdayNote ? t.birthdayNote
+        : milestone ? `오늘은 우리 ${state.days.toLocaleString('ko-KR')}일이야`
         : `${koDate(since)}부터 오늘까지`;
     } else {
       $('#counter').hidden = true;

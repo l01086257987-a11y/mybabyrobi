@@ -23,6 +23,8 @@ tools/decrypt.mjs   data → private 로 복구
 
 1. `private/content.json`에서 글과 날짜를 고쳐요.
    - `password`: 입장 비밀번호로 쓸 날짜
+   - `together.firstDay`: 사귄 날을 0일로 세면 `0`, 1일로 세면 `1`
+   - `together.birthdayNote`: 생일 당일에만 D+ 아래에 뜨는 한 줄
    - `question`: 입장 화면 질문 (예: "우리가 사귄 날은?")
    - `hint`: 두 번 틀리면 보여줄 힌트
    - `question`과 `hint`는 입장 전에 보여야 해서 암호화되지 않아요.
