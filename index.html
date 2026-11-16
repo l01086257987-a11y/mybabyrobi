@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리의 첫 장면</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="단 한 사람을 위한 상영관">
+<meta property="og:title" content="우리의 첫 장면">
+<meta property="og:description" content="단 한 사람을 위한 상영관에 초대합니다">
+<meta name="theme-color" content="#140c11">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&amp;family=Gowun+Batang:wght@400;700&amp;family=Nanum+Gothic+Coding&amp;family=Nanum+Pen+Script&amp;display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="locked">
+
+<canvas id="petals" aria-hidden="true"></canvas>
+
+<!-- 입장: 영화 티켓 -->
+<section id="gate" class="gate" aria-label="입장">
+  <div class="gate-inner">
+    <div class="ticket" id="ticket">
+      <div class="ticket-main">
+        <p class="eyebrow">PRIVATE SCREENING</p>
+        <h1 class="ticket-title">우리의 첫 장면</h1>
+        <p class="ticket-sub">단 한 사람을 위한 상영관</p>
+        <dl class="ticket-meta">
+          <div><dt>상영일</dt><dd id="ticket-date">오늘</dd></div>
+          <div><dt>좌석</dt><dd>내 옆자리</dd></div>
+          <div><dt>관람</dt><dd>1명</dd></div>
+        </dl>
+      </div>
+      <div class="ticket-stub" aria-hidden="true">
+        <span class="stub-admit">Admit One</span>
+        <span class="stub-no">No. 0001</span>
+      </div>
+    </div>
+
+    <form id="gate-form" class="gate-form" autocomplete="off" novalidate>
+      <label for="gate-input">입장 확인 · 우리가 처음 만난 날은?</label>
+      <div class="gate-row">
+        <input id="gate-input" name="date" inputmode="numeric" placeholder="YYYY.MM.DD" maxlength="10" aria-describedby="gate-msg">
+        <button type="submit" id="gate-btn" class="gate-btn">입장하기</button>
+      </div>
+      <p id="gate-msg" class="gate-msg" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+
+<main id="film" hidden>
+
+  <!-- 오프닝 -->
+  <section class="opening" id="opening">
+    <svg id="bloom" class="bloom" viewBox="-130 -130 260 260" aria-hidden="true"></svg>
+    <p class="opening-en">Happy Birthday</p>
+    <h2 class="opening-ko" id="greeting"></h2>
+    <p class="opening-date" id="birthday-text"></p>
+    <p class="scroll-cue">아래로 내려서 상영을 시작해 줘</p>
+  </section>
+
+  <!-- S#1 첫 만남 -->
+  <section class="scene scene-meet" id="meet">
+    <p class="slug"><b>S#1.</b><span id="meet-slug"></span></p>
+    <h2 class="scene-title" id="meet-title"></h2>
+    <div class="screen" id="screen">
+      <video id="meet-video" playsinline preload="metadata"></video>
+      <div class="screen-cover" id="screen-cover">
+        <button type="button" class="play" id="play-btn" disabled>
+          <span class="play-ring" aria-hidden="true"></span>
+          <span class="play-label" id="play-label">필름 감는 중…</span>
+        </button>
+        <span class="date-stamp" id="date-stamp" aria-hidden="true"></span>
+      </div>
+    </div>
+    <p class="screen-note" id="meet-note"></p>
+    <figure class="real" id="real" hidden>
+      <div class="real-photo">
+        <img id="real-img" alt="처음 만난 날의 실제 사진">
+        <figcaption id="real-caption"></figcaption>
+      </div>
+    </figure>
+  </section>
+
+  <!-- S#2 그 후의 우리 -->
+  <section class="scene scene-days" id="days">
+    <p class="slug"><b>S#2.</b><span id="days-slug"></span></p>
+    <div class="counter" id="counter">
+      <span class="counter-label" id="counter-label"></span>
+      <span class="counter-num" id="counter-num">D+0</span>
+      <span class="counter-sub" id="counter-sub"></span>
+    </div>
+    <ol class="filmstrip" id="filmstrip"></ol>
+  </section>
+
+  <!-- S#3 편지 -->
+  <section class="scene scene-letter" id="letter">
+    <p class="slug"><b>S#3.</b><span id="letter-slug"></span></p>
+    <div class="envelope-wrap" id="envelope-wrap">
+      <button type="button" class="envelope" id="envelope" aria-label="편지 열기">
+        <span class="env-back"></span>
+        <span class="env-paper"></span>
+        <span class="env-front"></span>
+        <span class="env-flap"></span>
+        <span class="env-seal" aria-hidden="true">&#9829;</span>
+      </button>
+      <p class="hint">봉투를 탭해서 열어 줘</p>
+    </div>
+    <article class="letter" id="letter-paper" hidden></article>
+  </section>
+
+  <!-- S#4 오늘 -->
+  <section class="scene scene-cake" id="cake">
+    <p class="slug"><b>S#4.</b><span id="cake-slug"></span></p>
+    <h2 class="scene-title" id="cake-title"></h2>
+    <button type="button" class="cake" id="cake-btn" aria-label="촛불 끄기">
+      <svg id="cake-svg" viewBox="0 0 240 210" aria-hidden="true"></svg>
+    </button>
+    <p class="hint" id="cake-hint">케이크를 탭하면 촛불이 꺼져</p>
+  </section>
+
+</main>
+
+<!-- 엔딩 크레딧 -->
+<div class="credits" id="credits" hidden>
+  <button type="button" class="credits-skip" id="credits-skip">건너뛰기</button>
+  <div class="credits-roll" id="credits-roll"></div>
+  <div class="credits-final" id="credits-final" hidden>
+    <p class="tbc" id="final-big"></p>
+    <p class="final-line" id="final-line"></p>
+    <p class="final-small" id="final-small"></p>
+    <div class="final-actions">
+      <button type="button" class="btn-ghost" id="again-letter">편지 다시 읽기</button>
+      <button type="button" class="btn-ghost" id="again-top">처음부터 다시 보기</button>
+    </div>
+  </div>
+</div>
+
+<button type="button" class="music" id="music-btn" aria-label="배경 음악" aria-pressed="false" hidden>&#9835;</button>
+<audio id="music" loop preload="auto"></audio>
+
+<script src="assets/app.js" defer></script>
+</body>
+</html>
