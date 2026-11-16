@@ -292,6 +292,7 @@
       const res = await fetch('data/gate.json', { cache: 'no-cache' });
       if (!res.ok) throw new Error(res.status);
       state.gate = await res.json();
+      if (state.gate.question) $('#gate-q').textContent = state.gate.question;
       fetchBytes('data/content.bin').then(b => { state.contentBuf = b; }, noop);
     } catch (e) {
       console.error(e);
@@ -375,7 +376,12 @@
     if (since) {
       state.days = daysSince(since);
       $('#counter-label').textContent = t.label || '우리가 함께한 지';
-      $('#counter-sub').textContent = `${koDate(since)}부터 오늘까지`;
+      const today = new Date();
+      const bd = c.birthday ? parseDate(c.birthday) : null;
+      const isBirthday = bd && today.getMonth() === bd.getMonth() && today.getDate() === bd.getDate();
+      $('#counter-sub').textContent = isBirthday
+        ? `그리고 오늘, 네 생일이 우리 ${state.days}일이야`
+        : `${koDate(since)}부터 오늘까지`;
     } else {
       $('#counter').hidden = true;
     }

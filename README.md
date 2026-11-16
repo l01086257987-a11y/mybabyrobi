@@ -22,8 +22,10 @@ tools/decrypt.mjs   data → private 로 복구
 ## 내용 바꾸기
 
 1. `private/content.json`에서 글과 날짜를 고쳐요.
-   - `password`: 처음 만난 날 (입장 비밀번호)
-   - `hint`: 두 번 틀리면 보여줄 힌트. 이 값만 암호화되지 않아요.
+   - `password`: 입장 비밀번호로 쓸 날짜
+   - `question`: 입장 화면 질문 (예: "우리가 사귄 날은?")
+   - `hint`: 두 번 틀리면 보여줄 힌트
+   - `question`과 `hint`는 입장 전에 보여야 해서 암호화되지 않아요.
 2. 사진과 영상은 `private/media/`에 넣고, content.json에는 `"media/파일이름.jpg"` 형식으로 적어요.
 3. 아래 명령으로 암호화해요. Node 18 이상이 필요해요.
 

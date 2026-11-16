@@ -105,10 +105,10 @@ async function main() {
     return v;
   }
 
-  const { password: _password, hint = '', ...rest } = content;
+  const { password: _password, hint = '', question = '', ...rest } = content;
   const sealedContent = await walk(rest);
   await writeFile(path.join(DATA, 'content.bin'), await seal(key, new TextEncoder().encode(JSON.stringify(sealedContent))));
-  await writeFile(path.join(DATA, 'gate.json'), `${JSON.stringify({ v: 1, salt: Buffer.from(salt).toString('base64'), iter: ITERATIONS, hint }, null, 2)}\n`);
+  await writeFile(path.join(DATA, 'gate.json'), `${JSON.stringify({ v: 1, salt: Buffer.from(salt).toString('base64'), iter: ITERATIONS, question, hint }, null, 2)}\n`);
 
   let removed = 0;
   for (const f of await readdir(MEDIA_OUT)) {

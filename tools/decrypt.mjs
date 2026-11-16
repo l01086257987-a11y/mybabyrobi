@@ -51,7 +51,7 @@ async function main() {
     return v;
   }
   const restored = await walk(content);
-  const out = { password: `${pw.slice(0, 4)}.${pw.slice(4, 6)}.${pw.slice(6)}`, hint: gate.hint || '', ...restored };
+  const out = { password: `${pw.slice(0, 4)}.${pw.slice(4, 6)}.${pw.slice(6)}`, question: gate.question || '', hint: gate.hint || '', ...restored };
   await mkdir(PRIVATE, { recursive: true });
   await writeFile(path.join(PRIVATE, 'content.json'), `${JSON.stringify(out, null, 2)}\n`);
   console.log('\n✓ private/content.json 복구 완료\n');
