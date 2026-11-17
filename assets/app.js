@@ -541,6 +541,7 @@
     cinemaState = 'closing';
     video.pause();
     $('#cinema-play').hidden = true;
+    hideControls();
     exitFullscreen();
     placeStageAtScreen();
     cinema.classList.remove('on');
@@ -557,10 +558,55 @@
   $('#cinema-stage').addEventListener('click', () => {
     if (cinemaState !== 'open') return;
     cinema.classList.remove('intro');
-    if (video.paused) video.play().catch(noop); else video.pause();
+    if (video.paused) { video.play().catch(noop); showControls(); }
+    else if (cc.classList.contains('show')) hideControls();
+    else showControls();
   });
-  video.addEventListener('play', () => { $('#cinema-play').hidden = true; });
-  video.addEventListener('pause', () => { if (cinemaState === 'open' && !cinemaIntro && !video.ended) $('#cinema-play').hidden = false; });
+  video.addEventListener('play', () => { $('#cinema-play').hidden = true; if (cc.classList.contains('show')) showControls(); });
+  video.addEventListener('pause', () => {
+    if (cinemaState === 'open' && !cinemaIntro && !video.ended) { $('#cinema-play').hidden = false; showControls(true); }
+  });
+
+  /* ---------- 상영관 컨트롤: 탭하면 아래 띠에 나타나고 3초 뒤 사라진다 ---------- */
+  const cc = $('#cinema-controls'), ccPlay = $('#cc-play'), ccMute = $('#cc-mute'), ccSeek = $('#cc-seek'), ccVol = $('#cc-vol'), ccTime = $('#cc-time');
+  // 아이폰은 웹에서 음량을 바꿀 수 없다(기기 버튼으로만) → 음량 바를 숨기고 음소거만 둔다
+  const canSetVolume = (() => { try { const a = document.createElement('audio'); a.volume = .5; return a.volume === .5; } catch { return false; } })();
+  if (!canSetVolume) ccVol.hidden = true;
+  let ccTimer = 0, seeking = false;
+  const clock = s => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60))}`;
+  function showControls(stay) {
+    cc.classList.add('show');
+    clearTimeout(ccTimer);
+    if (!stay && !video.paused) ccTimer = setTimeout(() => cc.classList.remove('show'), 3000);
+  }
+  function hideControls() { clearTimeout(ccTimer); cc.classList.remove('show'); }
+  function syncControls() {
+    ccPlay.classList.toggle('is-paused', video.paused);
+    ccPlay.setAttribute('aria-label', video.paused ? '재생' : '일시정지');
+    const muted = video.muted || video.volume === 0;
+    ccMute.classList.toggle('is-muted', muted);
+    ccMute.setAttribute('aria-label', muted ? '소리 켜기' : '음소거');
+    if (video.duration) {
+      ccSeek.max = video.duration;
+      if (!seeking) ccSeek.value = video.currentTime;
+      ccSeek.style.setProperty('--p', `${(video.currentTime / video.duration) * 100}%`);
+      ccTime.textContent = `${clock(video.currentTime)} / ${clock(video.duration)}`;
+    }
+    const vol = muted ? 0 : video.volume;
+    ccVol.value = vol;
+    ccVol.style.setProperty('--p', `${vol * 100}%`);
+  }
+  ['timeupdate', 'play', 'pause', 'volumechange', 'loadedmetadata', 'seeked'].forEach(ev => video.addEventListener(ev, syncControls));
+  ccPlay.addEventListener('click', () => { cinema.classList.remove('intro'); if (video.paused) video.play().catch(noop); else video.pause(); showControls(); });
+  ccMute.addEventListener('click', () => {
+    video.muted = !video.muted;
+    if (!video.muted && video.volume === 0) video.volume = .7;
+    showControls(video.paused);
+  });
+  ccSeek.addEventListener('input', () => { seeking = true; video.currentTime = Number(ccSeek.value); syncControls(); showControls(video.paused); });
+  ccSeek.addEventListener('change', () => { seeking = false; });
+  ccVol.addEventListener('input', () => { video.volume = Number(ccVol.value); video.muted = video.volume === 0; showControls(video.paused); });
+  cc.addEventListener('pointerdown', () => showControls(video.paused));
   $('#cinema-close').addEventListener('click', () => closeCinema(video.duration > 0 && video.currentTime / video.duration > .8));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCinema(false); });
   const onFsChange = () => { if (!fsElement() && cinemaState === 'open') closeCinema(false); };
