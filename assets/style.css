@@ -216,9 +216,12 @@ main { position: relative; z-index: 1; }
 }
 .screen-note {
   margin: 10px 0 0; width: min(100%, 30em);
+  display: grid; gap: 1.1em;
   font-family: var(--f-hand); font-size: 1.04rem; line-height: 1.95;
-  color: var(--ivory); text-align: left; white-space: pre-line; text-wrap: pretty; word-break: keep-all;
+  color: var(--ivory); text-align: left; word-break: keep-all;
 }
+.screen-note p { margin: 0; white-space: pre-line; text-wrap: pretty; }
+.screen-note.show p { animation: ink 1.4s ease both; animation-delay: calc(.5s + var(--i, 0) * .9s); }
 
 .real { margin: 34px 0 0; }
 .real-photo {

@@ -365,10 +365,18 @@
     title.textContent = '';
     if (md) title.append(`${koDate(md)},`, el('br'));
     title.append(el('em', null, m.line || '우리가 처음 만난 날'));
-    $('#meet-note').textContent = m.note || '';
+    // 영상 아래 글: 빈 줄로 문단을 나누고, 영상을 다 본 뒤에 한 문단씩 나타난다
+    const note = $('#meet-note');
+    note.textContent = '';
+    String(m.note || '').split(/\n\s*\n/).map(t => t.trim()).filter(Boolean).forEach((t, i) => {
+      const para = el('p', null, t);
+      para.style.setProperty('--i', i);
+      note.append(para);
+    });
+    note.hidden = Boolean(m.video) || !note.children.length;
     if (md) $('#date-stamp').textContent = `'${String(md.getFullYear()).slice(2)} ${md.getMonth() + 1} ${md.getDate()}`;
     $('#real-caption').textContent = m.realCaption || '';
-    if (!m.video) { screenEl.hidden = true; $('#meet-note').hidden = true; }
+    if (!m.video) screenEl.hidden = true;
 
     // S#2
     $('#days-slug').textContent = scenes.days || '그 후의 우리 (계속)';
@@ -478,7 +486,7 @@
     } catch (e) {
       console.error(e);
       playLabel.textContent = '영상을 불러오지 못했어';
-      showReal();
+      showAfterFilm();
     }
   }
 
@@ -551,7 +559,7 @@
       cinemaState = 'closed';
       document.body.classList.remove('locked');
       playLabel.textContent = '다시 보기';
-      if (revealAfter) showReal();
+      if (revealAfter) showAfterFilm();
     }, reduceMotion ? 0 : CINEMA_OUT + 50);
   }
   playBtn.addEventListener('click', openCinema);
@@ -617,12 +625,25 @@
   video.addEventListener('pause', () => { if (!video.ended) duck(false); });
   video.addEventListener('ended', () => { duck(false); setTimeout(() => closeCinema(true), 700); });
 
-  function showReal() {
-    const real = $('#real');
-    if (!state.hasReal || !real.hidden) return;
-    real.hidden = false;
-    real.classList.add('show');
-    setTimeout(() => real.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' }), 500);
+  // 영상을 다 보면(또는 영상을 못 불러오면) 글과 실제 사진을 꺼낸다
+  function showAfterFilm() {
+    const note = $('#meet-note'), real = $('#real');
+    let first = null;
+    if (note.hidden && note.children.length) {
+      note.hidden = false;
+      note.classList.add('show');
+      first = note;
+    }
+    if (state.hasReal && real.hidden) {
+      real.hidden = false;
+      real.classList.add('show');
+      first = first || real;
+    }
+    if (!first) return;
+    setTimeout(() => {
+      const y = first.getBoundingClientRect().top + window.scrollY - 110;
+      window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }, 400);
   }
 
   function setupMusic(url) {
