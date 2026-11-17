@@ -215,9 +215,9 @@ main { position: relative; z-index: 1; }
   font-variant-numeric: tabular-nums;
 }
 .screen-note {
-  margin: 4px 0 0; max-width: 24em;
-  font-family: var(--f-hand); font-size: 1.12rem; line-height: 1.85;
-  color: var(--ivory); white-space: pre-line; text-wrap: balance; word-break: keep-all;
+  margin: 10px 0 0; width: min(100%, 30em);
+  font-family: var(--f-hand); font-size: 1.04rem; line-height: 1.95;
+  color: var(--ivory); text-align: left; white-space: pre-line; text-wrap: pretty; word-break: keep-all;
 }
 
 .real { margin: 34px 0 0; }
