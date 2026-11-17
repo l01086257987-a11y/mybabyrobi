@@ -361,7 +361,6 @@
     const m = c.firstMeet || {};
     const md = m.date ? parseDate(m.date) : null;
     $('#meet-slug').textContent = `${m.place || ''}${m.time ? ` (${m.time})` : ''}`;
-    $('#cinema-slug').textContent = `S#1. ${$('#meet-slug').textContent}`;
     const title = $('#meet-title');
     title.textContent = '';
     if (md) title.append(`${koDate(md)},`, el('br'));

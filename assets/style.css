@@ -361,14 +361,6 @@ main { position: relative; z-index: 1; }
 .cinema-bar.top { top: 0; transform: translateY(-101%); }
 .cinema-bar.bottom { bottom: 0; transform: translateY(101%); }
 .cinema.on .cinema-bar { transform: none; transition-duration: 2.4s; }
-.cinema-slug {
-  position: absolute; bottom: 14px;
-  left: max(16px, env(safe-area-inset-left, 0px)); right: 64px;
-  font-family: var(--f-mono); font-size: .74rem; letter-spacing: .06em; color: var(--gold);
-  opacity: 0; transition: opacity .6s ease;
-}
-.cinema.on .cinema-slug { opacity: 1; transition-delay: 2.2s; }
-.cinema.thin .cinema-slug { display: none; }
 .cinema-close {
   position: absolute; z-index: 3;
   top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
