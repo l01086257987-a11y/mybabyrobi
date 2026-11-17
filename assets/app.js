@@ -361,6 +361,7 @@
     const m = c.firstMeet || {};
     const md = m.date ? parseDate(m.date) : null;
     $('#meet-slug').textContent = `${m.place || ''}${m.time ? ` (${m.time})` : ''}`;
+    $('#cinema-slug').textContent = `S#1. ${$('#meet-slug').textContent}`;
     const title = $('#meet-title');
     title.textContent = '';
     if (md) title.append(`${koDate(md)},`, el('br'));
@@ -423,6 +424,9 @@
     $('#cake-title').textContent = cake.title || '촛불 끄고, 소원 빌어 줘';
     buildCake($('#cake-svg'), cake.candles);
 
+    // 선물
+    if (c.gift) renderGift(c.gift);
+
     // 크레딧
     const roll = $('#credits-roll');
     roll.textContent = '';
@@ -479,14 +483,75 @@
     }
   }
 
-  playBtn.addEventListener('click', () => {
-    cover.classList.add('gone');
-    video.controls = true;
-    video.play().catch(() => { cover.classList.remove('gone'); });
-  });
+  /* ---------- 상영관: 위아래 검은 띠가 들어오며 전체화면 ---------- */
+  const cinema = $('#cinema');
+  let cinemaState = 'closed'; // closed | open | closing
+  const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function enterFullscreen(node) {
+    const req = node.requestFullscreen || node.webkitRequestFullscreen;
+    if (!req) return; // 아이폰은 지원 안 함 → 화면을 덮는 것으로 대신
+    try { const r = req.call(node, { navigationUI: 'hide' }); if (r && r.catch) r.catch(noop); } catch { /* 무시 */ }
+  }
+  function exitFullscreen() {
+    const ex = document.exitFullscreen || document.webkitExitFullscreen;
+    if (!fsElement() || !ex) return;
+    try { const r = ex.call(document); if (r && r.catch) r.catch(noop); } catch { /* 무시 */ }
+  }
+  function placeStageAtScreen() {
+    const r = screenEl.getBoundingClientRect();
+    cinema.style.setProperty('--x', `${r.left}px`);
+    cinema.style.setProperty('--y', `${r.top}px`);
+    cinema.style.setProperty('--w', `${r.width}px`);
+    cinema.style.setProperty('--h', `${r.height}px`);
+  }
+  function sizeBars() {
+    const W = cinema.clientWidth || window.innerWidth, H = cinema.clientHeight || window.innerHeight;
+    const ar = video.videoWidth ? video.videoWidth / video.videoHeight : (parseFloat(screenEl.style.getPropertyValue('--ar')) || 16 / 9);
+    const bar = Math.max((H - W / ar) / 2, H * .07);
+    cinema.style.setProperty('--bar', `${Math.round(bar)}px`);
+    cinema.classList.toggle('thin', bar < 52);
+  }
+  function openCinema() {
+    if (cinemaState !== 'closed' || !video.src) return;
+    placeStageAtScreen();
+    cinema.hidden = false;
+    sizeBars();
+    document.body.classList.add('locked');
+    if (video.ended) video.currentTime = 0;
+    video.play().catch(() => { video.controls = true; }); // 막히면 직접 누를 수 있게 컨트롤을 보여 준다
+    enterFullscreen(cinema);
+    cinemaState = 'open';
+    void cinema.offsetWidth;
+    requestAnimationFrame(() => cinema.classList.add('on'));
+    setTimeout(() => { if (cinemaState === 'open') video.controls = true; }, reduceMotion ? 0 : 1200);
+  }
+  function closeCinema(revealAfter) {
+    if (cinemaState !== 'open') return;
+    cinemaState = 'closing';
+    video.pause();
+    video.controls = false;
+    exitFullscreen();
+    placeStageAtScreen();
+    cinema.classList.remove('on');
+    setTimeout(placeStageAtScreen, 60); // 전체화면이 풀리며 화면 크기가 바뀐 뒤 다시 맞춘다
+    setTimeout(() => {
+      cinema.hidden = true;
+      cinemaState = 'closed';
+      document.body.classList.remove('locked');
+      playLabel.textContent = '다시 보기';
+      if (revealAfter) showReal();
+    }, reduceMotion ? 0 : 1000);
+  }
+  playBtn.addEventListener('click', openCinema);
+  $('#cinema-close').addEventListener('click', () => closeCinema(video.duration > 0 && video.currentTime / video.duration > .8));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCinema(false); });
+  const onFsChange = () => { if (!fsElement() && cinemaState === 'open') closeCinema(false); };
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  window.addEventListener('resize', () => { if (cinemaState === 'open') sizeBars(); });
   video.addEventListener('play', () => duck(true));
   video.addEventListener('pause', () => { if (!video.ended) duck(false); });
-  video.addEventListener('ended', () => { duck(false); showReal(); });
+  video.addEventListener('ended', () => { duck(false); setTimeout(() => closeCinema(true), 700); });
 
   function showReal() {
     const real = $('#real');
@@ -585,9 +650,152 @@
     const r = cakeBtn.getBoundingClientRect();
     Petals.burst(r.left + r.width / 2, r.top + r.height * .22);
     cakeHint.textContent = '소원, 꼭 이루어질 거야';
-    await wait(reduceMotion ? 800 : 3400);
-    openCredits();
+    await wait(reduceMotion ? 300 : 2000);
+    if (state.content && state.content.gift) showGift(); else openCredits();
   });
+
+  /* ---------- 선물 상자 + 자물쇠 문제 ---------- */
+  const gift = $('#gift'), giftBox = $('#gift-box'), coupon = $('#coupon');
+  const quizBox = $('#quiz'), quizChoices = $('#quiz-choices'), quizForm = $('#quiz-form'), quizInput = $('#quiz-input'), quizMsg = $('#quiz-msg');
+  const quiz = { i: 0, list: [], busy: false };
+  const norm = s => String(s ?? '').toLowerCase().replace(/[\s.,!?~'"’]/g, '');
+
+  function buildGift(svg, n) {
+    let dots = '';
+    for (let i = 0; i < n; i++) dots += `<circle class="lock-dot" cx="${(120 + (i - (n - 1) / 2) * 9).toFixed(1)}" cy="177" r="2.6"/>`;
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="gbody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4526c"/><stop offset="1" stop-color="#93334d"/></linearGradient>
+        <linearGradient id="glid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8687f"/><stop offset="1" stop-color="#b84a64"/></linearGradient>
+        <linearGradient id="glock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eceef0"/><stop offset="1" stop-color="#b9bdc2"/></linearGradient>
+        <radialGradient id="gglow"><stop offset="0" stop-color="#ffe3a3" stop-opacity=".95"/><stop offset="1" stop-color="#ffe3a3" stop-opacity="0"/></radialGradient>
+      </defs>
+      <ellipse cx="120" cy="215" rx="96" ry="9" fill="#000" opacity=".4"/>
+      <circle class="gift-glow" cx="120" cy="92" r="96" fill="url(#gglow)"/>
+      <rect x="44" y="98" width="152" height="114" rx="6" fill="url(#gbody)"/>
+      <rect x="110" y="98" width="20" height="114" fill="#e2c07f"/>
+      <g class="gift-lid">
+        <rect x="36" y="76" width="168" height="30" rx="5" fill="url(#glid)"/>
+        <rect x="110" y="76" width="20" height="30" fill="#e8cb8f"/>
+        <path d="M120 74C96 44 66 52 78 72C85 82 108 78 120 74Z" fill="#e2c07f"/>
+        <path d="M120 74C144 44 174 52 162 72C155 82 132 78 120 74Z" fill="#e2c07f"/>
+        <path d="M118 76L104 100M122 76L136 100" stroke="#d3ad69" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="120" cy="74" r="7.5" fill="#c9a35f"/>
+      </g>
+      <g class="gift-lock">
+        <path class="shackle" d="M107 154V141a13 13 0 0 1 26 0V154" fill="none" stroke="#c9ccd0" stroke-width="5.5" stroke-linecap="round"/>
+        <rect x="98" y="150" width="44" height="38" rx="7" fill="url(#glock)"/>
+        <circle cx="120" cy="163" r="3.4" fill="#5b5f66"/>
+        <rect x="118.5" y="164" width="3" height="6" rx="1.2" fill="#5b5f66"/>
+        ${dots}
+      </g>`;
+  }
+
+  function renderGift(g) {
+    $('#gift-title').textContent = g.title || '선물이 도착했어';
+    $('#gift-sub').textContent = g.locked || '';
+    quiz.list = Array.isArray(g.questions) ? g.questions : [];
+    buildGift(giftBox, quiz.list.length);
+    const dotsEl = $('#quiz-dots');
+    dotsEl.textContent = '';
+    quiz.list.forEach(() => dotsEl.append(el('span')));
+    const cp = g.coupon || {};
+    $('#coupon-title').textContent = cp.title || '';
+    $('#coupon-body').textContent = cp.body || '';
+    $('#coupon-no').textContent = cp.no || '';
+    const terms = $('#coupon-terms');
+    terms.textContent = '';
+    (cp.terms || []).forEach(([k, v]) => {
+      const d = el('div');
+      d.append(el('dt', null, k), el('dd', null, v));
+      terms.append(d);
+    });
+  }
+
+  function showQuestion() {
+    const q = quiz.list[quiz.i];
+    $('#quiz-step').textContent = `자물쇠 ${quiz.i + 1} / ${quiz.list.length}`;
+    $('#quiz-q').textContent = q.q || '';
+    quizMsg.textContent = '';
+    quizChoices.textContent = '';
+    const hasChoices = Array.isArray(q.choices) && q.choices.length > 0;
+    quizChoices.hidden = !hasChoices;
+    quizForm.hidden = hasChoices;
+    if (hasChoices) {
+      q.choices.forEach((label, idx) => {
+        const b = el('button', 'choice', label);
+        b.type = 'button';
+        b.addEventListener('click', () => answer(idx, b));
+        quizChoices.append(b);
+      });
+    } else {
+      quizInput.value = '';
+    }
+    quizBox.classList.remove('next', 'shake');
+    void quizBox.offsetWidth;
+    quizBox.classList.add('next');
+  }
+
+  function answer(given, btn) {
+    if (quiz.busy) return;
+    const q = quiz.list[quiz.i];
+    let ok;
+    if (Array.isArray(q.choices) && q.choices.length) {
+      const right = typeof q.answer === 'number' ? q.answer : q.choices.findIndex(ch => norm(ch) === norm(q.answer));
+      ok = given === right;
+    } else {
+      ok = [].concat(q.answers ?? q.answer ?? []).some(a => norm(a) === norm(given));
+    }
+    if (!ok) {
+      quizMsg.textContent = q.hint ? `땡! 힌트: ${q.hint}` : '땡! 다시 생각해 봐';
+      const target = btn || quizBox;
+      target.classList.remove('shake');
+      void target.offsetWidth;
+      target.classList.add('shake');
+      return;
+    }
+    quiz.busy = true;
+    if (btn) btn.classList.add('right');
+    quizMsg.textContent = '딸깍! 정답이야';
+    const giftDots = giftBox.querySelectorAll('.lock-dot'), panelDots = $('#quiz-dots').children;
+    if (giftDots[quiz.i]) giftDots[quiz.i].classList.add('on');
+    if (panelDots[quiz.i]) panelDots[quiz.i].classList.add('on');
+    quiz.i++;
+    setTimeout(() => {
+      quiz.busy = false;
+      if (quiz.i < quiz.list.length) showQuestion(); else openGift();
+    }, reduceMotion ? 300 : 950);
+  }
+  quizForm.addEventListener('submit', e => { e.preventDefault(); answer(quizInput.value); });
+
+  async function openGift() {
+    quizBox.classList.add('gone');
+    $('#gift-sub').textContent = '자물쇠가 열렸어!';
+    gift.classList.add('unlocked');
+    await wait(reduceMotion ? 0 : 1300);
+    quizBox.hidden = true;
+    gift.classList.add('opened');
+    const r = giftBox.getBoundingClientRect();
+    Petals.burst(r.left + r.width / 2, r.top + r.height * .4);
+    await wait(reduceMotion ? 0 : 1000);
+    coupon.hidden = false;
+    gift.classList.add('revealed');
+    await wait(reduceMotion ? 0 : 750);
+    giftBox.hidden = true;
+    $('#to-credits').hidden = false;
+  }
+
+  function showGift() {
+    gift.hidden = false;
+    if (quiz.list.length) showQuestion();
+    else quizBox.hidden = true;
+    setTimeout(() => {
+      const y = gift.getBoundingClientRect().top + window.scrollY - 40;
+      window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }, 80);
+    if (!quiz.list.length) setTimeout(openGift, reduceMotion ? 0 : 1600);
+  }
+  $('#to-credits').addEventListener('click', () => openCredits());
 
   /* ---------- 엔딩 크레딧 ---------- */
   const credits = $('#credits'), roll = $('#credits-roll'), finalCard = $('#credits-final'), skipBtn = $('#credits-skip');
@@ -618,9 +826,6 @@
     await wait(reduceMotion ? 0 : 700);
     credits.hidden = true;
     document.body.classList.remove('locked');
-    cakeBtn.classList.remove('out');
-    cakeBtn.disabled = false;
-    cakeHint.textContent = '케이크를 탭하면 촛불이 꺼져';
     Petals.start();
     if (target === 'top') {
       window.scrollTo({ top: 0, behavior: 'auto' });
