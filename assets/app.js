@@ -486,6 +486,8 @@
   /* ---------- 상영관: 위아래 검은 띠가 들어오며 전체화면 ---------- */
   const cinema = $('#cinema');
   let cinemaState = 'closed'; // closed | open | closing
+  let cinemaIntro = false;     // 검은 띠가 내려오는 중
+  const CINEMA_IN = 2400, CINEMA_OUT = 1400; // style.css 의 전환 시간과 맞춘다
   const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
   function enterFullscreen(node) {
     const req = node.requestFullscreen || node.webkitRequestFullscreen;
@@ -518,7 +520,18 @@
     sizeBars();
     document.body.classList.add('locked');
     if (video.ended) video.currentTime = 0;
-    video.play().catch(() => { $('#cinema-play').hidden = false; }); // 막히면 ▶ 를 보여 주고 탭하면 재생
+    // 탭한 순간에 한 번 재생했다 멈춰서 휴대폰의 자동재생 제한을 풀어 두고, 띠가 다 내려온 뒤 진짜로 튼다
+    cinemaIntro = true;
+    cinema.classList.add('intro');
+    $('#cinema-stage').style.backgroundImage = cover.style.backgroundImage;
+    video.play().catch(noop);
+    video.pause();
+    setTimeout(() => {
+      cinemaIntro = false;
+      cinema.classList.remove('intro');
+      if (cinemaState !== 'open' || !video.paused) return;
+      video.play().catch(() => { $('#cinema-play').hidden = false; }); // 막히면 ▶ 를 보여 주고 탭하면 재생
+    }, reduceMotion ? 0 : CINEMA_IN);
     enterFullscreen(cinema);
     cinemaState = 'open';
     void cinema.offsetWidth;
@@ -539,15 +552,16 @@
       document.body.classList.remove('locked');
       playLabel.textContent = '다시 보기';
       if (revealAfter) showReal();
-    }, reduceMotion ? 0 : 1000);
+    }, reduceMotion ? 0 : CINEMA_OUT + 50);
   }
   playBtn.addEventListener('click', openCinema);
   $('#cinema-stage').addEventListener('click', () => {
     if (cinemaState !== 'open') return;
+    cinema.classList.remove('intro');
     if (video.paused) video.play().catch(noop); else video.pause();
   });
   video.addEventListener('play', () => { $('#cinema-play').hidden = true; });
-  video.addEventListener('pause', () => { if (cinemaState === 'open' && !video.ended) $('#cinema-play').hidden = false; });
+  video.addEventListener('pause', () => { if (cinemaState === 'open' && !cinemaIntro && !video.ended) $('#cinema-play').hidden = false; });
   $('#cinema-close').addEventListener('click', () => closeCinema(video.duration > 0 && video.currentTime / video.duration > .8));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCinema(false); });
   const onFsChange = () => { if (!fsElement() && cinemaState === 'open') closeCinema(false); };
