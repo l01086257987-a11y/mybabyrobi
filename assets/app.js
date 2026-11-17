@@ -518,18 +518,17 @@
     sizeBars();
     document.body.classList.add('locked');
     if (video.ended) video.currentTime = 0;
-    video.play().catch(() => { video.controls = true; }); // 막히면 직접 누를 수 있게 컨트롤을 보여 준다
+    video.play().catch(() => { $('#cinema-play').hidden = false; }); // 막히면 ▶ 를 보여 주고 탭하면 재생
     enterFullscreen(cinema);
     cinemaState = 'open';
     void cinema.offsetWidth;
     requestAnimationFrame(() => cinema.classList.add('on'));
-    setTimeout(() => { if (cinemaState === 'open') video.controls = true; }, reduceMotion ? 0 : 1200);
   }
   function closeCinema(revealAfter) {
     if (cinemaState !== 'open') return;
     cinemaState = 'closing';
     video.pause();
-    video.controls = false;
+    $('#cinema-play').hidden = true;
     exitFullscreen();
     placeStageAtScreen();
     cinema.classList.remove('on');
@@ -543,6 +542,12 @@
     }, reduceMotion ? 0 : 1000);
   }
   playBtn.addEventListener('click', openCinema);
+  $('#cinema-stage').addEventListener('click', () => {
+    if (cinemaState !== 'open') return;
+    if (video.paused) video.play().catch(noop); else video.pause();
+  });
+  video.addEventListener('play', () => { $('#cinema-play').hidden = true; });
+  video.addEventListener('pause', () => { if (cinemaState === 'open' && !video.ended) $('#cinema-play').hidden = false; });
   $('#cinema-close').addEventListener('click', () => closeCinema(video.duration > 0 && video.currentTime / video.duration > .8));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCinema(false); });
   const onFsChange = () => { if (!fsElement() && cinemaState === 'open') closeCinema(false); };
