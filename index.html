@@ -149,6 +149,7 @@
 <!-- 게임: 눈 내리는 밤 광장 -->
 <div class="game" id="game" hidden>
   <canvas class="game-canvas" id="game-canvas"></canvas>
+  <div class="game-fade" id="game-fade" aria-hidden="true"></div>
   <div class="game-loading" id="game-loading" role="status" aria-live="polite">
     <div class="gl-snow" id="gl-snow" aria-hidden="true"></div>
     <span class="gl-flake"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5"/><path d="M9.6 4.2 12 6.4l2.4-2.2M9.6 19.8 12 17.6l2.4 2.2M4.4 10.3l3.1-.9-.7-3.2M19.6 13.7l-3.1.9.7 3.2M4.4 13.7l3.1.9-.7 3.2M19.6 10.3l-3.1-.9.7-3.2"/></g></svg></span>
@@ -165,6 +166,7 @@
   <div class="joy-zone" id="joy-right" data-side="right" hidden><span class="joy-base"><span class="joy-knob"></span></span></div>
   <p class="game-help" id="game-help"></p>
   <button type="button" class="game-action" id="game-action" hidden></button>
+  <button type="button" class="game-movie" id="game-movie" hidden></button>
   <div class="game-emotes">
     <button type="button" class="emote-btn" id="game-sit" hidden><span aria-hidden="true">🪑</span><b id="game-sit-label">앉기</b></button>
     <button type="button" class="emote-btn" id="game-hug" hidden><span aria-hidden="true">🤗</span>안아주기</button>

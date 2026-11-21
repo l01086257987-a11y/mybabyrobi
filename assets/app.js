@@ -870,6 +870,11 @@
         brokers: broker ? [broker] : null,
         onWantOpen: openGiftSheet,
         onReady: doneLoading,          // 광장 첫 장면이 그려지면 로딩 화면을 걷는다
+        getCinemaVideo: () => (gc.cinemaVideo ? mediaURL(gc.cinemaVideo).then(url => {   // 영화관 스크린 영상 (있으면)
+          const v = document.createElement('video');
+          v.src = url; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+          return v;
+        }) : Promise.resolve(null)),
         secret: state.pw,
       });
     } catch (e) {
