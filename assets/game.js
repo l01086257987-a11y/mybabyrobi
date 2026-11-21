@@ -328,6 +328,7 @@ function makeChar(o) {
     const p = new THREE.Group(); p.position.set(x, 1.0, 0);
     const m = new THREE.Mesh(armGeo, coat); m.position.y = -0.17; p.add(m);
     const h = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), skin); h.position.y = -0.35; p.add(h);
+    p.userData.hand = h;
     rig.add(p); return p;
   };
   const armL = mkArm(-0.35), armR = mkArm(0.35);
@@ -344,7 +345,7 @@ function makeChar(o) {
     back.scale.set(1.08, 1, 0.55); back.position.set(0, -0.3, -0.17); head.add(back);
     [-0.29, 0.29].forEach(x => {
       const s = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.42, 4, 10), hair);
-      s.position.set(x, -0.27, 0.02); s.rotation.z = x > 0 ? -0.12 : 0.12; head.add(s);
+      s.position.set(x * 0.98, -0.27, -0.09); s.rotation.z = x > 0 ? -0.12 : 0.12; head.add(s); // 옆모습에서 얼굴을 가리지 않게 뒤로
     });
   }
   const eyeM = new THREE.MeshBasicMaterial({ color: '#1c1614' }), white = new THREE.MeshBasicMaterial({ color: '#ffffff' });
@@ -388,18 +389,25 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   const s = Math.sin(c.phase) * 0.55 * c.walk;
   c.legL.rotation.x = s; c.legR.rotation.x = -s;
   let lx = holding ? -1.15 : -s * 0.8, rx = holding ? -1.15 : s * 0.8;
-  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55;
+  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55, reach = 1;
   if (emo && emo.w > 0) {
     const w = emo.w, mix = (a, b) => a + (b - a) * w;
-    if (emo.type === 'hug') {                     // 팔을 앞으로 뻗어 감싸 안고, 고개를 살짝 기댄다
-      lx = mix(lx, -1.45); rx = mix(rx, -1.45); lz = mix(lz, 0.95); rz = mix(rz, -0.95);
-      lean = 0.1 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.25 * w;
-    } else {                                      // 몸을 기울여 쪽, 볼이 빨개진다
-      lx = mix(lx, -0.35); rx = mix(rx, -0.35); lz = mix(lz, 0.25); rz = mix(rz, -0.25);
-      lean = 0.3 * w; tilt = 0.12 * w * side; blush = 0.55 + 0.4 * w;
+    if (emo.type === 'hug') {
+      // 팔끼리 부딪히지 않게 높이를 나눈다: side>0(Beomjun)은 허리를, side<0(Robi)은 목을 감싼다.
+      // 짧은 팔로 상대 옆구리까지 닿도록 안는 동안만 팔을 늘린다. 머리는 서로 반대쪽으로 기댄다.
+      const ax = side > 0 ? -1.15 : -1.75;
+      lx = mix(lx, ax); rx = mix(rx, ax); lz = mix(lz, 0.1); rz = mix(rz, -0.1);
+      reach = 1 + 0.6 * w; tilt = 0.24 * w * side; blush = 0.55 + 0.25 * w;
+    } else {
+      // 얼굴이 딱 닿을 만큼만 몸을 기울이고(서 있는 거리와 맞춰 계산), 고개는 서로 반대로 갸웃
+      lx = mix(lx, -0.5); rx = mix(rx, -0.5); lz = mix(lz, 0.2); rz = mix(rz, -0.2);
+      lean = 0.08 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.4 * w;
     }
   }
   const k = Math.min(1, dt * 12);
+  const sc = c.armL.scale.y + (reach - c.armL.scale.y) * k;
+  c.armL.scale.y = c.armR.scale.y = sc;
+  c.armL.userData.hand.scale.y = c.armR.userData.hand.scale.y = 1 / sc;
   c.armL.rotation.x += (lx - c.armL.rotation.x) * k; c.armR.rotation.x += (rx - c.armR.rotation.x) * k;
   c.armL.rotation.z += (lz - c.armL.rotation.z) * k; c.armR.rotation.z += (rz - c.armR.rotation.z) * k;
   c.rig.rotation.x += (lean - c.rig.rotation.x) * k;
@@ -754,7 +762,9 @@ export async function startGame(o) {
 
   // 안아주기 · 뽀뽀: 누가 눌러도 되고, 각자 폰이면 두 화면에서 같이 나온다
   const hugBtn = q('#game-hug'), kissBtn = q('#game-kiss');
-  const EMOTE = { hug: { dur: 3, gap: 0.52, text: '꼬옥 🤗' }, kiss: { dur: 2.4, gap: 0.62, text: '쪽! 💋' } };
+  // gap = 두 사람 사이 거리. 머리 지름이 0.68 이라 안기는 0.7(머리가 겹치지 않게),
+  // 뽀뽀는 0.9 에서 0.08 만큼 기울이면 얼굴 사이가 0.67 → 딱 닿는다
+  const EMOTE = { hug: { dur: 3.2, gap: 0.7, text: '꼬옥 🤗' }, kiss: { dur: 2.6, gap: 0.9, text: '쪽! 💋' } };
   const constrain = (x, z) => {
     const r = Math.hypot(x, z);
     if (r > PLAZA_R - 0.5) { x *= (PLAZA_R - 0.5) / r; z *= (PLAZA_R - 0.5) / r; }
@@ -850,7 +860,9 @@ export async function startGame(o) {
       const k = 1 - Math.exp(-dt * 8);
       B.pos.x += (em.b[0] - B.pos.x) * k; B.pos.z += (em.b[1] - B.pos.z) * k;
       R.pos.x += (em.r[0] - R.pos.x) * k; R.pos.z += (em.r[1] - R.pos.z) * k;
-      B.ry = em.ang; R.ry = em.ang + Math.PI; B.moving = false; R.moving = false;
+      B.ry = em.ang; R.ry = em.ang + Math.PI;
+      B.moving = Math.hypot(em.b[0] - B.pos.x, em.b[1] - B.pos.z) > 0.05;   // 자리로 갈 땐 걸어서
+      R.moving = Math.hypot(em.r[0] - R.pos.x, em.r[1] - R.pos.z) > 0.05;
       if (!em.popped && em.t > em.dur * (em.type === 'kiss' ? 0.42 : 0.3)) {
         em.popped = true;
         const mx = (B.pos.x + R.pos.x) / 2, mz = (B.pos.z + R.pos.z) / 2;
