@@ -406,6 +406,7 @@
     (c.moments || []).forEach(mo => {
       const li = el('li', 'frame');
       const box = el('div', 'frame-img');
+      if (mo.ratio > 0) box.style.aspectRatio = String(mo.ratio); // 사진 모양 그대로 (휴대폰 캡처도 잘리지 않게)
       const img = el('img');
       img.alt = mo.caption || '우리 사진';
       img.decoding = 'async';
