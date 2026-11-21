@@ -1698,7 +1698,7 @@ export async function startGame(o) {
     }
     const myC = st.mode === 'local' ? B : chars[st.role];
     const inTheater = areaOf(myC.pos.x) === 'cinema' && myC.pos.z < AREA.cinema.z + 7.3;
-    const movieAct = inTheater && movie && !busLock ? (movie.paused ? '▶ 상영 시작' : '❚❚ 잠깐 멈춤') : '';
+    const movieAct = !inTheater || busLock ? '' : movie ? (movie.paused ? '▶ 상영 시작' : '❚❚ 잠깐 멈춤') : movieLoading ? '필름 감는 중…' : '';
     let boardAct = '';
     if (st.bus.phase === 'wait' && !st.emote) {
       const S = STOPS[st.bus.stop], mc = mine().filter(c => areaOf(c.pos.x) === S.area);
@@ -1711,7 +1711,7 @@ export async function startGame(o) {
       actionBtn.hidden = !act; actionBtn.dataset.act = act; actionBtn.textContent = label;
       hugBtn.hidden = !canTouch; kissBtn.hidden = !canTouch;
       sitBtn.hidden = !sitAct; sitBtn.dataset.act = sitAct; sitLbl.textContent = sitAct === 'stand' ? '일어나기' : '앉기';
-      movieBtn.hidden = !movieAct; movieBtn.textContent = movieAct;
+      movieBtn.hidden = !movieAct; movieBtn.textContent = movieAct; movieBtn.disabled = !movie;
       boardBtn.hidden = !boardAct; boardBtn.dataset.act = boardAct;
       boardBtn.textContent = boardAct === 'board' ? '🚌 버스 타기' : '내리기';
     }
@@ -1742,6 +1742,7 @@ export async function startGame(o) {
   applyMode();
   if (st.mode === 'online') ensureNet();
   resume();
+  setTimeout(loadMovie, 1500);                     // 영화관 영상은 광장에서 노는 동안 미리 받아 둔다
 
   return {
     openGift() { playOpen(true); },

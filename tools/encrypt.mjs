@@ -107,8 +107,8 @@ async function main() {
 
   const { password: _password, hint = '', question = '', ...rest } = content;
   const sealedContent = await walk(rest);
-  // 입장권 화면에서 미리 받아 둘 파일 (배경 음악). 이름은 해시라 내용은 알 수 없다
-  const warm = [sealedContent.music].filter(Boolean).map(m => m.src);
+  // 입장권 화면에서 차례로 미리 받아 둘 파일 (배경 음악 → 재현 영상). 이름은 해시라 내용은 알 수 없다
+  const warm = [sealedContent.music, sealedContent.firstMeet && sealedContent.firstMeet.video].filter(Boolean).map(m => m.src);
   await writeFile(path.join(DATA, 'content.bin'), await seal(key, new TextEncoder().encode(JSON.stringify(sealedContent))));
   await writeFile(path.join(DATA, 'gate.json'), `${JSON.stringify({ v: 1, salt: Buffer.from(salt).toString('base64'), iter: ITERATIONS, question, hint, warm }, null, 2)}\n`);
 

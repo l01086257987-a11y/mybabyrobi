@@ -58,14 +58,17 @@
     return out.buffer;
   }
 
-  const state = { key: null, content: null, contentBuf: null, gate: null, tries: 0, days: 0, mediaCache: new Map(), warm: new Map(), musicURL: null, musicWanted: false };
+  const state = { key: null, content: null, contentBuf: null, gate: null, tries: 0, days: 0, mediaCache: new Map(), warm: new Map(), warmProg: new Map(), musicURL: null, musicWanted: false };
 
   function mediaURL(ref, onProgress) {
     if (!ref || !ref.src) return Promise.reject(new Error('no media'));
     if (!state.mediaCache.has(ref.src)) {
       state.mediaCache.set(ref.src, (async () => {
-        const warm = state.warm.get(ref.src);           // 입장권 화면에서 미리 받아 둔 파일이면 그대로
-        const buf = await (warm ? warm.catch(() => fetchBytes(ref.src, onProgress)) : fetchBytes(ref.src, onProgress));
+        const warm = state.warm.get(ref.src);           // 입장권 화면에서 미리 받기 시작한 파일이면 그걸 기다린다
+        let tick = 0;
+        if (warm && onProgress) tick = setInterval(() => onProgress(state.warmProg.get(ref.src) || 0), 200);
+        const buf = await (warm ? warm.catch(() => fetchBytes(ref.src, onProgress)) : fetchBytes(ref.src, onProgress)).finally(() => clearInterval(tick));
+        state.warm.delete(ref.src); state.warmProg.delete(ref.src);
         const plain = await decrypt(state.key, buf);
         return URL.createObjectURL(new Blob([plain], { type: ref.type || '' }));
       })());
@@ -372,11 +375,14 @@
       state.gate = await res.json();
       if (state.gate.question) $('#gate-q').textContent = state.gate.question;
       fetchBytes('data/content.bin').then(b => { state.contentBuf = b; }, noop);
-      // 배경 음악을 날짜를 입력하는 동안 미리 받아 둔다 → 입장하자마자 바로 나온다
+      // 날짜를 입력하는 동안 배경 음악 → 재현 영상 순서로 미리 받아 둔다 (음악이 먼저 다 오도록 하나씩)
+      let chain = Promise.resolve();
       (state.gate.warm || []).forEach(src => {
         if (typeof src !== 'string') return;
-        const p = fetchBytes(src); p.catch(noop);
+        const p = chain.then(() => fetchBytes(src, v => state.warmProg.set(src, v)));
+        p.catch(noop);
         state.warm.set(src, p);
+        chain = p.catch(noop);
       });
     } catch (e) {
       console.error(e);
@@ -556,9 +562,9 @@
         probe.src = u;
       }).catch(e => console.warn(e));
     }
-    const musicReady = c.music ? mediaURL(c.music).then(setupMusic).catch(e => console.warn(e)) : Promise.resolve();
+    if (c.music) mediaURL(c.music).then(setupMusic).catch(e => console.warn(e));
     if (!c.music && audio.src) { audio.pause(); audio.removeAttribute('src'); }
-    if (m.video) Promise.race([musicReady, new Promise(r => setTimeout(r, 4000))]).then(() => loadVideo(m.video));
+    if (m.video) loadVideo(m.video);                // 입장권 화면에서 음악 다음으로 미리 받기 시작했다
     if (m.realPhoto) mediaURL(m.realPhoto).then(u => { $('#real-img').src = u; state.hasReal = true; }).catch(e => console.warn(e));
 
     const imgs = [...document.querySelectorAll('#filmstrip img')];
@@ -938,7 +944,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js?v=1121g').catch(noop);
+    import('./game.js?v=1121h').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -983,7 +989,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js?v=1121g');
+      const { startGame } = await import('./game.js?v=1121h');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,
