@@ -378,19 +378,33 @@ function makeChar(o) {
   const bubble = makeBubble();
   bubble.sprite.position.y = 2.45; g.add(bubble.sprite);
 
-  return { group: g, rig, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
+  return { group: g, rig, head, blushM, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
 }
 
-function animateChar(c, dt, t, holding) {
+// emo: { type: 'hug' | 'kiss', w: 0~1 } — 안기·뽀뽀 자세를 w 만큼 섞는다. side: 고개를 기울일 방향(±1)
+function animateChar(c, dt, t, holding, emo, side = 1) {
   c.walk += ((c.moving ? 1 : 0) - c.walk) * Math.min(1, dt * 10);
   if (c.moving) c.phase += dt * 11;
   const s = Math.sin(c.phase) * 0.55 * c.walk;
   c.legL.rotation.x = s; c.legR.rotation.x = -s;
-  const armX = holding ? -1.15 : -s * 0.8;
-  c.armL.rotation.x += ((holding ? armX : -s * 0.8) - c.armL.rotation.x) * Math.min(1, dt * 12);
-  c.armR.rotation.x += ((holding ? armX : s * 0.8) - c.armR.rotation.x) * Math.min(1, dt * 12);
-  c.armL.rotation.z = holding ? 0.32 : 0.12;
-  c.armR.rotation.z = holding ? -0.32 : -0.12;
+  let lx = holding ? -1.15 : -s * 0.8, rx = holding ? -1.15 : s * 0.8;
+  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55;
+  if (emo && emo.w > 0) {
+    const w = emo.w, mix = (a, b) => a + (b - a) * w;
+    if (emo.type === 'hug') {                     // 팔을 앞으로 뻗어 감싸 안고, 고개를 살짝 기댄다
+      lx = mix(lx, -1.45); rx = mix(rx, -1.45); lz = mix(lz, 0.95); rz = mix(rz, -0.95);
+      lean = 0.1 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.25 * w;
+    } else {                                      // 몸을 기울여 쪽, 볼이 빨개진다
+      lx = mix(lx, -0.35); rx = mix(rx, -0.35); lz = mix(lz, 0.25); rz = mix(rz, -0.25);
+      lean = 0.3 * w; tilt = 0.12 * w * side; blush = 0.55 + 0.4 * w;
+    }
+  }
+  const k = Math.min(1, dt * 12);
+  c.armL.rotation.x += (lx - c.armL.rotation.x) * k; c.armR.rotation.x += (rx - c.armR.rotation.x) * k;
+  c.armL.rotation.z += (lz - c.armL.rotation.z) * k; c.armR.rotation.z += (rz - c.armR.rotation.z) * k;
+  c.rig.rotation.x += (lean - c.rig.rotation.x) * k;
+  c.head.rotation.z += (tilt - c.head.rotation.z) * k;
+  c.blushM.opacity = blush;
   c.rig.position.y = Math.abs(Math.sin(c.phase)) * 0.05 * c.walk + Math.sin(t * 2.2) * 0.008;
   c.group.rotation.y = angLerp(c.group.rotation.y, c.ry, Math.min(1, dt * 12));
 }
@@ -522,6 +536,12 @@ export async function startGame(o) {
   // 하트·반짝이
   const heartMap = heartTex();
   const hearts = [];
+  const bigHeart = (x, y, z) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartMap, color: '#ff5f86', transparent: true, depthWrite: false, depthTest: false }));
+    s.position.set(x, y, z); s.scale.set(0.01, 0.01, 1); s.renderOrder = 12;
+    scene.add(s);
+    hearts.push({ s, vx: 0, vy: 0.35, vz: 0, life: 1.6, age: 0, grow: 0.75 });
+  };
   const burst = (x, y, z, n) => {
     for (let i = 0; i < n; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartMap, color: pick(['#ff8fa8', '#ff6f91', '#ffd0dc', '#e2c07f']), transparent: true, depthWrite: false }));
@@ -690,6 +710,7 @@ export async function startGame(o) {
     } else if (m.k === 'e') {
       if (m.t === 'give' && st.holder === 'beomjun') receiveGive();
       if (m.t === 'open' && !st.opened) playOpen(false);
+      if (m.t === 'hug' || m.t === 'kiss') startEmote(m.t, m.mx, m.mz, m.ang, false);
     }
   }
   function sendState(force) {
@@ -731,6 +752,33 @@ export async function startGame(o) {
     if (!mine) flash(`${ga(names.robi)} 선물을 열었어!`, 4000);
   }
 
+  // 안아주기 · 뽀뽀: 누가 눌러도 되고, 각자 폰이면 두 화면에서 같이 나온다
+  const hugBtn = q('#game-hug'), kissBtn = q('#game-kiss');
+  const EMOTE = { hug: { dur: 3, gap: 0.52, text: '꼬옥 🤗' }, kiss: { dur: 2.4, gap: 0.62, text: '쪽! 💋' } };
+  const constrain = (x, z) => {
+    const r = Math.hypot(x, z);
+    if (r > PLAZA_R - 0.5) { x *= (PLAZA_R - 0.5) / r; z *= (PLAZA_R - 0.5) / r; }
+    const fx = x - FOUNTAIN.x, fz = z - FOUNTAIN.z, fd = Math.hypot(fx, fz) || 1, need = FOUNTAIN.r + 0.45;
+    if (fd < need) { x = FOUNTAIN.x + (fx / fd) * need; z = FOUNTAIN.z + (fz / fd) * need; }
+    return [x, z];
+  };
+  function startEmote(type, mx, mz, ang, mine) {
+    const E = EMOTE[type];
+    if (st.emote || !E || ![mx, mz, ang].every(Number.isFinite)) return;
+    const [cx, cz] = constrain(mx, mz), dx = Math.sin(ang), dz = Math.cos(ang), h = E.gap / 2;
+    st.emote = { type, t: 0, dur: E.dur, w: 0, ang, popped: false, b: [cx - dx * h, cz - dz * h], r: [cx + dx * h, cz + dz * h] };
+    joyL.reset(); joyR.reset();
+    flash(E.text, E.dur * 1000 + 600);
+    if (mine && st.mode === 'online' && st.net) st.net.send('e', { r: st.role, t: type, mx: +cx.toFixed(2), mz: +cz.toFixed(2), ang: +ang.toFixed(3) });
+  }
+  // 카메라에서 둘 다 옆모습이 보이도록 좌우로 나란히 마주 보게 한다
+  const emoteHere = type => {
+    const b = chars.beomjun.pos, r = chars.robi.pos;
+    startEmote(type, (b.x + r.x) / 2, (b.z + r.z) / 2, b.x <= r.x ? Math.PI / 2 : -Math.PI / 2, true);
+  };
+  hugBtn.addEventListener('click', () => emoteHere('hug'));
+  kissBtn.addEventListener('click', () => emoteHere('kiss'));
+
   actionBtn.addEventListener('click', () => {
     const act = actionBtn.dataset.act;
     if (act === 'give') giveGift();
@@ -761,7 +809,10 @@ export async function startGame(o) {
   let camExtra = 0;
   function updateCamera(dt, snap) {
     let tx, tz, extra = 0;
-    if (st.mode === 'local') {
+    if (st.emote) {                                   // 안기·뽀뽀: 둘 사이로 가까이 다가간다
+      const b = chars.beomjun.pos, r = chars.robi.pos;
+      tx = (b.x + r.x) / 2; tz = (b.z + r.z) / 2; extra = -3.2 * (st.emote.w || 0);
+    } else if (st.mode === 'local') {
       const b = chars.beomjun.pos, r = chars.robi.pos;
       tx = (b.x + r.x) / 2; tz = (b.z + r.z) / 2;
       extra = Math.min(7, Math.hypot(b.x - r.x, b.z - r.z) * 0.55);
@@ -769,7 +820,7 @@ export async function startGame(o) {
     const k = snap ? 1 : 1 - Math.exp(-dt * 4);
     camT.x += (tx - camT.x) * k; camT.z += (tz - camT.z) * k; camExtra += (extra - camExtra) * k;
     const portrait = camera.aspect < 1;
-    const back = (portrait ? 7.4 : 6.4) + camExtra, up = (portrait ? 5.4 : 4.6) + camExtra * 0.7;
+    const back = (portrait ? 7.4 : 6.4) + camExtra, up = (portrait ? 5.4 : 4.6) + camExtra * (camExtra < 0 ? 0.9 : 0.7);
     camera.position.set(camT.x, up, camT.z + back);
     camera.lookAt(camT.x, 0.9, camT.z - 0.6);
   }
@@ -792,21 +843,36 @@ export async function startGame(o) {
     const dt = Math.min(0.1, (now - last) / 1000 || 0.016);
     last = now; time += dt;
     const B = chars.beomjun, R = chars.robi;
+    const em = st.emote;
+    if (em) {
+      em.t += dt;
+      em.w = Math.max(0, Math.min(1, em.t / 0.45, (em.dur - em.t) / 0.4));
+      const k = 1 - Math.exp(-dt * 8);
+      B.pos.x += (em.b[0] - B.pos.x) * k; B.pos.z += (em.b[1] - B.pos.z) * k;
+      R.pos.x += (em.r[0] - R.pos.x) * k; R.pos.z += (em.r[1] - R.pos.z) * k;
+      B.ry = em.ang; R.ry = em.ang + Math.PI; B.moving = false; R.moving = false;
+      if (!em.popped && em.t > em.dur * (em.type === 'kiss' ? 0.42 : 0.3)) {
+        em.popped = true;
+        const mx = (B.pos.x + R.pos.x) / 2, mz = (B.pos.z + R.pos.z) / 2;
+        if (em.type === 'kiss') { bigHeart(mx, 1.75, mz); burst(mx, 1.6, mz, 10); } else burst(mx, 1.9, mz, 22);
+      }
+      if (em.t >= em.dur) st.emote = null;
+    }
 
     if (st.mode === 'local') {
       const vb = joyL.v.x || joyL.v.y ? joyL.v : keyVec('w', 's', 'a', 'd');
       const vr = joyR.v.x || joyR.v.y ? joyR.v : keyVec('arrowup', 'arrowdown', 'arrowleft', 'arrowright');
-      move(B, vb, dt, R); move(R, vr, dt, B);
+      if (!em) { move(B, vb, dt, R); move(R, vr, dt, B); }
     } else {
       const me = chars[st.role], them = chars[other[st.role]];
       const kv = keyVec('w', 's', 'a', 'd'), ka = keyVec('arrowup', 'arrowdown', 'arrowleft', 'arrowright');
       const v = joyL.v.x || joyL.v.y ? joyL.v : { x: kv.x || ka.x, y: kv.y || ka.y };
-      move(me, v, dt, them);
+      if (!em) move(me, v, dt, them);
       const was = st.otherOnline;
-      st.otherOnline = now - st.otherSeen < 4500 && st.otherSeen > 0;
-      if (st.otherOnline && !was) flash(`${names[other[st.role]]} 들어왔어!`);
+      st.otherOnline = now - st.otherSeen < 8000 && st.otherSeen > 0; // 잠깐 끊겨도 바로 나간 걸로 보지 않는다
+      if (st.otherOnline && !was && !em) flash(`${names[other[st.role]]} 들어왔어!`);
       if (st.otherOnline !== was) updateLabels();
-      if (st.remote) {
+      if (st.remote && !em) {
         const kk = 1 - Math.exp(-dt * 12);
         them.pos.x += (st.remote.x - them.pos.x) * kk;
         them.pos.z += (st.remote.z - them.pos.z) * kk;
@@ -843,8 +909,11 @@ export async function startGame(o) {
     }
     if (st.opened && !st.opening) gift.glow.material.opacity = 0.35 + Math.sin(time * 3) * 0.1;
 
-    animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer);
-    animateChar(R, dt, time, st.holder === 'robi' && !st.transfer);
+    const emo = st.emote ? { type: st.emote.type, w: st.emote.w } : null;
+    gift.group.visible = !st.emote;                    // 안는 동안 선물은 잠깐 숨긴다
+    B.label.sprite.visible = R.label.sprite.visible = !st.emote;
+    animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer && !emo, emo, 1);
+    animateChar(R, dt, time, st.holder === 'robi' && !st.transfer && !emo, emo, -1);
     for (const c of [B, R]) {
       const left = c.bubble.until - now;
       c.bubble.sprite.material.opacity = left > 0 ? Math.min(1, left / 400, (6000 - left) / 200) : 0;
@@ -855,7 +924,8 @@ export async function startGame(o) {
       const h = hearts[i];
       h.age += dt;
       h.s.position.x += h.vx * dt; h.s.position.y += h.vy * dt; h.s.position.z += h.vz * dt;
-      h.vy -= 0.6 * dt;
+      if (h.grow) { const g = h.grow * Math.min(1, h.age / 0.22) * (1 + Math.sin(h.age * 14) * 0.04); h.s.scale.set(g, g, 1); }
+      else h.vy -= 0.6 * dt;
       h.s.material.opacity = Math.max(0, 1 - h.age / h.life);
       if (h.age >= h.life) { scene.remove(h.s); h.s.material.dispose(); hearts.splice(i, 1); }
     }
@@ -871,10 +941,13 @@ export async function startGame(o) {
     } else if (st.opened && !st.opening && iAmR) {
       act = 'open'; label = '쿠폰 보기';
     }
-    const sig = act + label;
+    if (st.emote) { act = ''; label = ''; }
+    const canTouch = dist < 2.3 && !st.emote && !st.transfer && (st.mode === 'local' || st.otherOnline);
+    const sig = act + label + (canTouch ? '+touch' : '');
     if (sig !== shownAction) {
       shownAction = sig;
       actionBtn.hidden = !act; actionBtn.dataset.act = act; actionBtn.textContent = label;
+      hugBtn.hidden = !canTouch; kissBtn.hidden = !canTouch;
     }
 
     renderStatus(now);
