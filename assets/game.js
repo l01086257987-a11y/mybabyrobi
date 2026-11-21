@@ -559,6 +559,7 @@ const STOPS = {
 const RIDE_SEC = 60;                                           // 영화관까지 1분
 const BUS = { L: 9, W: 2.6, floorY: 0.55, door: -2.7 };        // door: 문 가운데 (버스 기준 x)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const noop = () => {};
 
 function plateTex(text, bg, fg, w = 512, h = 96, font = 52) {
   return canvasTex(w, h, (g) => {
@@ -792,13 +793,14 @@ function buildCinema(scene) {
     add(new THREE.BoxGeometry(0.4, 0.35, 0.4), armM, x, 0.17, z);
     seats.push({ x: O.x + x, z: O.z + z - 0.04, ry: Math.PI });
   }));
+  let videoTex = null;
   return {
     seats,
-    setVideo(video) {
-      const tex = new THREE.VideoTexture(video);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      screenMat.map = tex; screenMat.needsUpdate = true;
+    setVideo(video) {                              // 상영을 시작하면 스크린에 영상
+      if (!videoTex) { videoTex = new THREE.VideoTexture(video); videoTex.colorSpace = THREE.SRGBColorSpace; }
+      screenMat.map = videoTex; screenMat.needsUpdate = true;
     },
+    clearVideo() { screenMat.map = placeholder; screenMat.needsUpdate = true; },   // 끝나면 다시 '곧 상영합니다'
   };
 }
 
@@ -1387,7 +1389,8 @@ export async function startGame(o) {
       movieLoading = false;
       if (!v) return;
       movie = v;
-      cinema.setVideo(v);
+      v.addEventListener('play', () => cinema.setVideo(v));        // 영상 자체가 검은 화면에서 페이드인 · 페이드아웃
+      v.addEventListener('ended', () => { cinema.clearVideo(); v.currentTime = 0; });
     }).catch(e => { movieLoading = false; console.warn(e); });
   }
   movieBtn.addEventListener('click', () => {

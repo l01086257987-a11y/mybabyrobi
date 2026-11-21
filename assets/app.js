@@ -557,6 +557,7 @@
     pool(tasks, 3);
 
     if (c.music) mediaURL(c.music).then(setupMusic).catch(e => console.warn(e));
+    if (c.musicQuiet && !canSetVolume) mediaURL(c.musicQuiet).then(setupQuietMusic).catch(e => console.warn(e));
     else if (audio.src) { audio.pause(); audio.removeAttribute('src'); }
   }
 
@@ -733,36 +734,57 @@
 
   /* ---------- 배경 음악 ----------
    * 파일 자체를 은은한 크기(약 -22 LUFS)로 만들어 두고 끝없이 반복한다. 게임 안에서도 계속 나온다.
-   * 영상(재현 영상, 영화관 스크린)이 나오면 디졸브로 줄여서 멈췄다가, 영상이 멈추면 다시 천천히 키운다.
-   * 아이폰은 audio.volume 을 바꿀 수 없다. Web Audio 로 돌리면 무음 모드에서 소리가 안 나서,
-   * 아이폰은 그냥 <audio> 로 틀고 (무음 모드여도 들림) 영상이 나오면 바로 멈췄다가 다시 튼다. */
-  const music = { level: 1, ducks: new Set(), timer: 0, blocked: false };
-  function primeMusic() {                          // 사용자가 탭한 순간에만 부른다
+   * 재현 영상이 나오면 디졸브로 꺼지고, 영화관 스크린 영상이 나오면 디졸브로 아주 작게(0.2) 깔린다.
+   * 영상이 멈추거나 끝나면 다시 디졸브로 원래 크기로 돌아온다.
+   * 아이폰은 audio.volume 을 바꿀 수 없고 Web Audio 는 무음 모드에서 소리가 안 나서,
+   * 그냥 <audio> 로 틀되, 작게 깔 때는 미리 -14dB 로 만든 사본으로 같은 자리에서 갈아탄다. */
+  const DUCK = { meet: 0, screen: 0.2 };
+  const music = { level: 1, ducks: new Map(), timer: 0, blocked: false, quiet: null };
+  function primeMusic() {                          // 사용자가 탭한 순간에만 부른다 (아이폰은 이때 깨운 오디오만 나중에 틀 수 있다)
     if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
+    if (!canSetVolume && !music.quiet) {
+      const qa = new Audio();
+      qa.preload = 'auto'; qa.src = silentWav(); qa.play().catch(noop);
+      music.quiet = qa;
+    }
   }
   const canFade = () => canSetVolume;
   function setMusicLevel(v) {
     music.level = v;
     if (canSetVolume) audio.volume = v;
   }
-  function musicOn() { return !!state.musicURL && state.musicWanted && music.ducks.size === 0 && !document.hidden; }
+  function musicTarget() {                         // 0 = 멈춤, 1 = 보통, 그 사이 = 작게 깔기
+    if (!state.musicURL || !state.musicWanted || document.hidden) return 0;
+    let t = 1;
+    for (const v of music.ducks.values()) t = Math.min(t, v);
+    return t;
+  }
+  const musicPlaying = () => !audio.paused || (music.quiet && music.quiet.ready && !music.quiet.paused);
   function syncMusic() {
     if (!state.musicURL) return;
     clearInterval(music.timer);
-    const on = musicOn();
-    if (document.hidden) { audio.pause(); return; }                  // 다른 앱으로 가면 바로 멈춤
-    if (on && audio.paused) {
-      if (canFade()) setMusicLevel(0);
+    const to = musicTarget();
+    if (to === 0 && document.hidden) { audio.pause(); if (music.quiet) music.quiet.pause(); return; }   // 다른 앱으로 가면 바로 멈춤
+    if (!canFade()) { switchMusic(to); return; }
+    if (to > 0 && audio.paused) {
+      setMusicLevel(0);
       audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
     }
-    if (!on && audio.paused) return;
-    if (!canFade()) { if (!on) audio.pause(); return; }
-    const from = music.level, to = on ? 1 : 0, ms = on ? 2200 : 1300, t0 = performance.now();
+    if (to === 0 && audio.paused) return;
+    const from = music.level, ms = to < from ? 1500 : 2200, t0 = performance.now();
     music.timer = setInterval(() => {
       const k = Math.min(1, (performance.now() - t0) / ms), e = k * k * (3 - 2 * k);
       setMusicLevel(from + (to - from) * e);
-      if (k >= 1) { clearInterval(music.timer); if (!on) audio.pause(); }
+      if (k >= 1) { clearInterval(music.timer); if (to === 0) audio.pause(); }
     }, 40);
+  }
+  function switchMusic(to) {                       // 아이폰: 보통 / 작은 사본 중 하나만, 같은 자리에서 이어서
+    const q = music.quiet && music.quiet.ready ? music.quiet : null;
+    if (to === 0) { audio.pause(); if (q) q.pause(); return; }
+    const main = to < 1 && q ? q : audio, other = main === audio ? q : audio;
+    if (!main.paused) { if (other && !other.paused) other.pause(); return; }
+    if (other && !other.paused) { try { main.currentTime = other.currentTime; } catch { /* 아직 못 읽었으면 처음부터 */ } }
+    main.play().then(() => { music.blocked = false; if (other) other.pause(); }, () => { music.blocked = true; });
   }
   function setupMusic(url) {
     state.musicURL = url;
@@ -774,8 +796,15 @@
     setMusicLevel(canFade() ? 0 : 1);
     syncMusic();
   }
-  function duckWith(media, name) {                 // 이 영상이 재생되는 동안 음악을 뺀다
-    media.addEventListener('play', () => { music.ducks.add(name); syncMusic(); });
+  function setupQuietMusic(url) {                  // 아이폰에서만 받는다
+    if (!music.quiet) { const qa = new Audio(); qa.preload = 'auto'; music.quiet = qa; }
+    music.quiet.pause();
+    music.quiet.src = url;
+    music.quiet.loop = true;
+    music.quiet.ready = true;
+  }
+  function duckWith(media, name) {                 // 이 영상이 재생되는 동안 음악을 줄이거나 뺀다
+    media.addEventListener('play', () => { music.ducks.set(name, DUCK[name] ?? 0); syncMusic(); });
     const back = () => { if (music.ducks.delete(name)) syncMusic(); };
     media.addEventListener('pause', back);
     media.addEventListener('ended', back);
@@ -789,7 +818,7 @@
     syncMusic();
   });
   // 처음 재생이 막혔거나 멈춰 있으면(자동 재생 제한) 다음에 화면을 만지는 순간 튼다
-  const onAnyTouch = () => { if (musicOn() && (music.blocked || audio.paused)) syncMusic(); };
+  const onAnyTouch = () => { if (musicTarget() > 0 && (music.blocked || !musicPlaying())) syncMusic(); };
   for (const ev of ['touchend', 'click', 'pointerup', 'keydown']) document.addEventListener(ev, onAnyTouch, true);
   document.addEventListener('visibilitychange', syncMusic);
 
@@ -921,7 +950,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js').catch(noop);
+    import('./game.js?v=1121c').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -966,7 +995,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js');
+      const { startGame } = await import('./game.js?v=1121c');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,
