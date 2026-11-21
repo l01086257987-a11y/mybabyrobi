@@ -35,7 +35,13 @@ tools/decrypt.mjs   data → private 로 복구
 node tools/encrypt.mjs
 ```
 
-음악을 넣으려면 `"music": "media/song.mp3"`처럼 적으면 돼요. 그러면 오른쪽 위에 음악 버튼이 생겨요.
+배경 음악은 `"music": "media/music.mp3"`에 있어요. 입장하면 저절로 시작해서 끝없이 반복하고, 3D 광장 안에서도 계속 나와요. 재현 영상이나 영화관 스크린 영상이 나오는 동안에는 디졸브로 꺼졌다가, 영상이 멈추면 다시 천천히 커져요. 오른쪽 위 ♫ 버튼으로 끄고 켤 수 있어요.
+
+아이폰은 웹에서 음량을 바꿀 수 없어서 파일 자체를 은은한 크기로 만들어 넣었어요. 노래를 바꿀 때도 아래처럼 줄여서 넣으면 같은 크기가 돼요 (원래 노래가 -13 LUFS 정도면 -9dB).
+
+```bash
+ffmpeg -i 원본.mp3 -map 0:a -map_metadata -1 -af volume=-9dB -c:a libmp3lame -b:a 192k private/media/music.mp3
+```
 
 ## 선물 상자 문제 (`gift.questions`)
 

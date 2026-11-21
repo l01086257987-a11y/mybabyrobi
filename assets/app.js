@@ -284,8 +284,7 @@
     });
     form.addEventListener('submit', e => {
       e.preventDefault();
-      // 휴대폰에서 음악을 나중에 틀 수 있도록, 탭한 순간에 오디오를 깨워 둔다
-      if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
+      primeMusic();   // 휴대폰에서 음악을 나중에 틀 수 있도록, 탭한 순간에 오디오를 깨워 둔다
       tryUnlock(input.value);
     });
 
@@ -631,9 +630,8 @@
   document.addEventListener('fullscreenchange', onFsChange);
   document.addEventListener('webkitfullscreenchange', onFsChange);
   window.addEventListener('resize', () => { if (cinemaState === 'open') sizeBars(); });
-  video.addEventListener('play', () => duck(true));
-  video.addEventListener('pause', () => { if (!video.ended) duck(false); });
-  video.addEventListener('ended', () => { duck(false); setTimeout(() => closeCinema(true), 700); });
+  duckWith(video, 'meet');                         // 재현 영상이 나오는 동안 배경 음악은 디졸브로 빠진다
+  video.addEventListener('ended', () => setTimeout(() => closeCinema(true), 700));
 
   // 영상을 다 보면(또는 영상을 못 불러오면) 글과 실제 사진을 꺼낸다
   function showAfterFilm() {
@@ -656,37 +654,81 @@
     }, 400);
   }
 
+  /* ---------- 배경 음악 ----------
+   * 파일 자체를 은은한 크기(약 -22 LUFS)로 만들어 두고 끝없이 반복한다. 게임 안에서도 계속 나온다.
+   * 영상(재현 영상, 영화관 스크린)이 나오면 디졸브로 줄여서 멈췄다가, 영상이 멈추면 다시 천천히 키운다.
+   * 아이폰은 audio.volume 을 바꿀 수 없어서, 입장 버튼을 누를 때 Web Audio 로 이어서 gain 으로 줄인다. */
+  const music = { level: 1, ducks: new Set(), timer: 0, ctx: null, gain: null, blocked: false };
+  function primeMusic() {                          // 사용자가 탭한 순간에만 부른다
+    if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
+    if (canSetVolume || music.ctx) { resumeMusicCtx(); return; }
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';   // 무음 모드여도 들리게 (iOS 17+)
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC(), gain = ctx.createGain();
+      ctx.createMediaElementSource(audio).connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.value = music.level;
+      music.ctx = ctx; music.gain = gain;
+      ctx.resume().catch(noop);
+    } catch (e) { console.warn(e); }
+  }
+  function resumeMusicCtx() { if (music.ctx && music.ctx.state !== 'running') music.ctx.resume().catch(noop); }
+  const canFade = () => canSetVolume || !!music.gain;
+  function setMusicLevel(v) {
+    music.level = v;
+    if (music.gain) music.gain.gain.value = v;
+    else if (canSetVolume) audio.volume = v;
+  }
+  function musicOn() { return !!state.musicURL && state.musicWanted && music.ducks.size === 0 && !document.hidden; }
+  function syncMusic() {
+    if (!state.musicURL) return;
+    clearInterval(music.timer);
+    const on = musicOn();
+    if (document.hidden) { audio.pause(); return; }                  // 다른 앱으로 가면 바로 멈춤
+    if (on && audio.paused) {
+      if (canFade()) setMusicLevel(0);
+      resumeMusicCtx();
+      audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
+    }
+    if (!on && audio.paused) return;
+    if (!canFade()) { if (!on) audio.pause(); return; }
+    const from = music.level, to = on ? 1 : 0, ms = on ? 2200 : 1300, t0 = performance.now();
+    music.timer = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / ms), e = k * k * (3 - 2 * k);
+      setMusicLevel(from + (to - from) * e);
+      if (k >= 1) { clearInterval(music.timer); if (!on) audio.pause(); }
+    }, 40);
+  }
   function setupMusic(url) {
     state.musicURL = url;
     audio.src = url;
-    audio.volume = .7;
+    audio.loop = true;
     musicBtn.hidden = false;
-    audio.play().then(() => { state.musicWanted = true; musicBtn.setAttribute('aria-pressed', 'true'); })
-      .catch(() => { state.musicWanted = false; musicBtn.setAttribute('aria-pressed', 'false'); });
+    state.musicWanted = true;
+    musicBtn.setAttribute('aria-pressed', 'true');
+    setMusicLevel(canFade() ? 0 : 1);
+    syncMusic();
+  }
+  function duckWith(media, name) {                 // 이 영상이 재생되는 동안 음악을 뺀다
+    media.addEventListener('play', () => { music.ducks.add(name); syncMusic(); });
+    const back = () => { if (music.ducks.delete(name)) syncMusic(); };
+    media.addEventListener('pause', back);
+    media.addEventListener('ended', back);
+    media.addEventListener('emptied', back);
   }
   musicBtn.addEventListener('click', () => {
     if (!state.musicURL) return;
-    if (audio.paused) { state.musicWanted = true; audio.volume = .7; audio.play().catch(noop); musicBtn.setAttribute('aria-pressed', 'true'); }
-    else { state.musicWanted = false; audio.pause(); musicBtn.setAttribute('aria-pressed', 'false'); }
+    primeMusic();
+    state.musicWanted = !state.musicWanted;
+    musicBtn.setAttribute('aria-pressed', String(state.musicWanted));
+    syncMusic();
   });
-  let fadeTimer = 0;
-  function duck(down) {
-    if (!state.musicURL || !state.musicWanted) return;
-    clearInterval(fadeTimer);
-    if (down) {
-      fadeTimer = setInterval(() => {
-        audio.volume = Math.max(0, audio.volume - .07);
-        if (audio.volume <= .01) { clearInterval(fadeTimer); audio.pause(); }
-      }, 50);
-    } else {
-      audio.volume = 0;
-      audio.play().catch(noop);
-      fadeTimer = setInterval(() => {
-        audio.volume = Math.min(.7, audio.volume + .05);
-        if (audio.volume >= .7) clearInterval(fadeTimer);
-      }, 80);
-    }
-  }
+  // 처음 재생이 막혔으면(자동 재생 제한) 다음에 화면을 만지는 순간 튼다
+  const onAnyTouch = () => { resumeMusicCtx(); if (music.blocked && musicOn()) syncMusic(); };
+  document.addEventListener('pointerdown', onAnyTouch, true);
+  document.addEventListener('keydown', onAnyTouch, true);
+  document.addEventListener('visibilitychange', syncMusic);
 
   /* ---------- 스크롤 등장 · 카운터 ---------- */
   function setupReveals() {
@@ -874,6 +916,7 @@
         getCinemaVideo: () => (gc.cinemaVideo ? mediaURL(gc.cinemaVideo).then(url => {   // 영화관 스크린 영상 (있으면)
           const v = document.createElement('video');
           v.src = url; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+          duckWith(v, 'screen');                 // 스크린 영상이 나오는 동안 배경 음악은 디졸브로 빠진다
           return v;
         }) : Promise.resolve(null)),
         secret: state.pw,
