@@ -58,13 +58,14 @@
     return out.buffer;
   }
 
-  const state = { key: null, content: null, contentBuf: null, gate: null, tries: 0, days: 0, mediaCache: new Map(), musicURL: null, musicWanted: false };
+  const state = { key: null, content: null, contentBuf: null, gate: null, tries: 0, days: 0, mediaCache: new Map(), warm: new Map(), musicURL: null, musicWanted: false };
 
   function mediaURL(ref, onProgress) {
     if (!ref || !ref.src) return Promise.reject(new Error('no media'));
     if (!state.mediaCache.has(ref.src)) {
       state.mediaCache.set(ref.src, (async () => {
-        const buf = await fetchBytes(ref.src, onProgress);
+        const warm = state.warm.get(ref.src);           // 입장권 화면에서 미리 받아 둔 파일이면 그대로
+        const buf = await (warm ? warm.catch(() => fetchBytes(ref.src, onProgress)) : fetchBytes(ref.src, onProgress));
         const plain = await decrypt(state.key, buf);
         return URL.createObjectURL(new Blob([plain], { type: ref.type || '' }));
       })());
@@ -371,6 +372,14 @@
       state.gate = await res.json();
       if (state.gate.question) $('#gate-q').textContent = state.gate.question;
       fetchBytes('data/content.bin').then(b => { state.contentBuf = b; }, noop);
+      // 배경 음악을 날짜를 입력하는 동안 미리 받아 둔다 → 입장하자마자 바로 나온다
+      // (작은 사본은 음량을 못 바꾸는 아이폰에서만 쓴다)
+      const volOK = (() => { try { const a = document.createElement('audio'); a.volume = .5; return a.volume === .5; } catch { return false; } })();
+      (state.gate.warm || []).forEach((src, i) => {
+        if (typeof src !== 'string' || (i > 0 && volOK)) return;
+        const p = fetchBytes(src); p.catch(noop);
+        state.warm.set(src, p);
+      });
     } catch (e) {
       console.error(e);
       say(location.protocol === 'file:'
@@ -549,16 +558,15 @@
         probe.src = u;
       }).catch(e => console.warn(e));
     }
-    if (m.video) loadVideo(m.video);
+    const musicReady = c.music ? mediaURL(c.music).then(setupMusic).catch(e => console.warn(e)) : Promise.resolve();
+    if (c.musicQuiet && !canSetVolume) mediaURL(c.musicQuiet).then(setupQuietMusic).catch(e => console.warn(e));
+    if (!c.music && audio.src) { audio.pause(); audio.removeAttribute('src'); }
+    if (m.video) Promise.race([musicReady, new Promise(r => setTimeout(r, 4000))]).then(() => loadVideo(m.video));
     if (m.realPhoto) mediaURL(m.realPhoto).then(u => { $('#real-img').src = u; state.hasReal = true; }).catch(e => console.warn(e));
 
     const imgs = [...document.querySelectorAll('#filmstrip img')];
     const tasks = (c.moments || []).map((mo, i) => () => mo.photo ? mediaURL(mo.photo).then(u => { imgs[i].src = u; }) : null);
     pool(tasks, 3);
-
-    if (c.music) mediaURL(c.music).then(setupMusic).catch(e => console.warn(e));
-    if (c.musicQuiet && !canSetVolume) mediaURL(c.musicQuiet).then(setupQuietMusic).catch(e => console.warn(e));
-    else if (audio.src) { audio.pause(); audio.removeAttribute('src'); }
   }
 
   async function loadVideo(ref) {
@@ -950,7 +958,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js?v=1121c').catch(noop);
+    import('./game.js?v=1121d').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -995,7 +1003,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js?v=1121c');
+      const { startGame } = await import('./game.js?v=1121d');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,

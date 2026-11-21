@@ -629,6 +629,7 @@ function buildBusStop(scene, S) {
   };
   ribbon('#ffffff', 0.35, 0.022, 0.12);
   const fill = ribbon('#ffd23f', 1, 0.026, 0.17);
+  fill.mesh.renderOrder = 3;            // 깊이를 안 쓰니, 나중에 만든 바닥(영화관 앞 인도)보다 늦게 그려야 보인다
   fill.mesh.geometry.setDrawRange(0, 0);
   // 표지판
   const poleM = std('#2a2d35', { roughness: 0.6 });

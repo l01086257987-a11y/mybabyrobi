@@ -3,5 +3,9 @@
   "salt": "8jGAdtrriMmThgD1hg9gkw==",
   "iter": 250000,
   "question": "우리가 처음 사귄 날은?",
-  "hint": "단풍 들기 시작한 10월의 어느 토요일"
+  "hint": "단풍 들기 시작한 10월의 어느 토요일",
+  "warm": [
+    "data/m/0103de5e0fdb96b82566.bin",
+    "data/m/36680e07052fac87ec17.bin"
+  ]
 }
