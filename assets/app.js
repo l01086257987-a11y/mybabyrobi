@@ -734,28 +734,16 @@
   /* ---------- 배경 음악 ----------
    * 파일 자체를 은은한 크기(약 -22 LUFS)로 만들어 두고 끝없이 반복한다. 게임 안에서도 계속 나온다.
    * 영상(재현 영상, 영화관 스크린)이 나오면 디졸브로 줄여서 멈췄다가, 영상이 멈추면 다시 천천히 키운다.
-   * 아이폰은 audio.volume 을 바꿀 수 없어서, 입장 버튼을 누를 때 Web Audio 로 이어서 gain 으로 줄인다. */
-  const music = { level: 1, ducks: new Set(), timer: 0, ctx: null, gain: null, blocked: false };
+   * 아이폰은 audio.volume 을 바꿀 수 없다. Web Audio 로 돌리면 무음 모드에서 소리가 안 나서,
+   * 아이폰은 그냥 <audio> 로 틀고 (무음 모드여도 들림) 영상이 나오면 바로 멈췄다가 다시 튼다. */
+  const music = { level: 1, ducks: new Set(), timer: 0, blocked: false };
   function primeMusic() {                          // 사용자가 탭한 순간에만 부른다
     if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
-    if (canSetVolume || music.ctx) { resumeMusicCtx(); return; }
-    try {
-      if (navigator.audioSession) navigator.audioSession.type = 'playback';   // 무음 모드여도 들리게 (iOS 17+)
-      const AC = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AC(), gain = ctx.createGain();
-      ctx.createMediaElementSource(audio).connect(gain);
-      gain.connect(ctx.destination);
-      gain.gain.value = music.level;
-      music.ctx = ctx; music.gain = gain;
-      ctx.resume().catch(noop);
-    } catch (e) { console.warn(e); }
   }
-  function resumeMusicCtx() { if (music.ctx && music.ctx.state !== 'running') music.ctx.resume().catch(noop); }
-  const canFade = () => canSetVolume || !!music.gain;
+  const canFade = () => canSetVolume;
   function setMusicLevel(v) {
     music.level = v;
-    if (music.gain) music.gain.gain.value = v;
-    else if (canSetVolume) audio.volume = v;
+    if (canSetVolume) audio.volume = v;
   }
   function musicOn() { return !!state.musicURL && state.musicWanted && music.ducks.size === 0 && !document.hidden; }
   function syncMusic() {
@@ -765,7 +753,6 @@
     if (document.hidden) { audio.pause(); return; }                  // 다른 앱으로 가면 바로 멈춤
     if (on && audio.paused) {
       if (canFade()) setMusicLevel(0);
-      resumeMusicCtx();
       audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
     }
     if (!on && audio.paused) return;
@@ -801,10 +788,9 @@
     musicBtn.setAttribute('aria-pressed', String(state.musicWanted));
     syncMusic();
   });
-  // 처음 재생이 막혔으면(자동 재생 제한) 다음에 화면을 만지는 순간 튼다
-  const onAnyTouch = () => { resumeMusicCtx(); if (music.blocked && musicOn()) syncMusic(); };
-  document.addEventListener('pointerdown', onAnyTouch, true);
-  document.addEventListener('keydown', onAnyTouch, true);
+  // 처음 재생이 막혔거나 멈춰 있으면(자동 재생 제한) 다음에 화면을 만지는 순간 튼다
+  const onAnyTouch = () => { if (musicOn() && (music.blocked || audio.paused)) syncMusic(); };
+  for (const ev of ['touchend', 'click', 'pointerup', 'keydown']) document.addEventListener(ev, onAnyTouch, true);
   document.addEventListener('visibilitychange', syncMusic);
 
   /* ---------- 스크롤 등장 · 카운터 ---------- */
