@@ -764,6 +764,7 @@
     const cp = g.coupon || {};
     $('#coupon-title').textContent = cp.title || '';
     $('#coupon-body').textContent = cp.body || '';
+    $('#coupon-body').hidden = !cp.body;
     $('#coupon-no').textContent = cp.no || '';
     const terms = $('#coupon-terms');
     terms.textContent = '';
