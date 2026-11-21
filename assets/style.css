@@ -573,7 +573,7 @@ main { position: relative; z-index: 1; }
 .invite.on { opacity: 1; }
 .invite.leaving { opacity: 0; transition-duration: .6s; }
 .invite-sky { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
-.invite-sky .flake { position: absolute; top: -12px; width: var(--s); height: var(--s); border-radius: 50%; background: #ffffff; filter: blur(.5px); animation: snowfall var(--d) linear var(--delay) infinite; }
+.invite-sky .flake, .gl-snow .flake { position: absolute; top: -12px; width: var(--s); height: var(--s); border-radius: 50%; background: #ffffff; filter: blur(.5px); animation: snowfall var(--d) linear var(--delay) infinite; }
 .invite-sky .star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff7dc; box-shadow: 0 0 6px 1px rgba(255, 240, 200, .7); animation: twinkle var(--d) ease-in-out var(--delay) infinite; }
 
 .invite-card {
@@ -636,10 +636,13 @@ main { position: relative; z-index: 1; }
   transition: opacity .7s ease;
 }
 .game-loading.gone { opacity: 0; pointer-events: none; }
-.gl-flake { width: 56px; height: 56px; color: var(--gold); animation: spin 7s linear infinite, glow-pulse 1.8s ease-in-out infinite alternate; }
+.gl-snow { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.gl-bar { position: relative; width: 132px; height: 2px; margin-top: 20px; border-radius: 2px; overflow: hidden; background: rgba(226, 192, 127, .16); }
+.gl-bar i { display: block; width: 0; height: 100%; border-radius: 2px; background: linear-gradient(90deg, rgba(226, 192, 127, .35), var(--gold)); box-shadow: 0 0 8px rgba(226, 192, 127, .6); }
+.gl-flake { position: relative; width: 52px; height: 52px; color: var(--gold); animation: spin 7s linear infinite, glow-pulse 1.8s ease-in-out infinite alternate; }
 .gl-flake svg { width: 100%; height: 100%; }
-.gl-text { margin: 14px 0 0; font-size: 1.08rem; letter-spacing: .04em; animation: breathe 2.2s ease-in-out infinite; }
-.gl-sub { margin: 0; font-size: .82rem; color: var(--muted); }
+.gl-text { position: relative; margin: 16px 0 0; font-size: 1.08rem; letter-spacing: .04em; animation: breathe 2.2s ease-in-out infinite; }
+.gl-sub { position: relative; margin: 0; font-size: .82rem; color: var(--muted); }
 
 /* ---------- 엔딩 크레딧 ---------- */
 .credits { position: fixed; inset: 0; z-index: 60; overflow: hidden; background: #000; color: var(--ivory); opacity: 0; transition: opacity 1.4s ease; }

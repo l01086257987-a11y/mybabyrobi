@@ -150,9 +150,11 @@
 <div class="game" id="game" hidden>
   <canvas class="game-canvas" id="game-canvas"></canvas>
   <div class="game-loading" id="game-loading" role="status" aria-live="polite">
+    <div class="gl-snow" id="gl-snow" aria-hidden="true"></div>
     <span class="gl-flake"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5"/><path d="M9.6 4.2 12 6.4l2.4-2.2M9.6 19.8 12 17.6l2.4 2.2M4.4 10.3l3.1-.9-.7-3.2M19.6 13.7l-3.1.9.7 3.2M4.4 13.7l3.1.9-.7 3.2M19.6 10.3l-3.1-.9.7-3.2"/></g></svg></span>
     <p class="gl-text">광장으로 들어가는 중…</p>
     <p class="gl-sub">눈 내리는 밤을 준비하고 있어</p>
+    <span class="gl-bar" aria-hidden="true"><i id="gl-bar"></i></span>
   </div>
   <div class="game-top">
     <button type="button" class="game-btn" id="game-exit">나가기</button>

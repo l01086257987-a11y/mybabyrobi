@@ -794,15 +794,18 @@
     $('#invite-go').textContent = iv.go || '초대에 응하기';
     $('#invite-later').textContent = iv.later || '나중에 갈게';
   }
+  function addSnow(box, n, maxOpacity = 0.95) {   // 천천히 내리는 눈송이
+    for (let i = 0; i < n; i++) {
+      const f = el('i', 'flake');
+      f.style.cssText = `left:${Math.random() * 100}%;--s:${(2 + Math.random() * 4).toFixed(1)}px;--d:${(7 + Math.random() * 9).toFixed(1)}s;--delay:${(-Math.random() * 16).toFixed(1)}s;--x:${(Math.random() * 60 - 30).toFixed(0)}px;opacity:${(0.3 + Math.random() * (maxOpacity - 0.3)).toFixed(2)}`;
+      box.append(f);
+    }
+  }
   function buildSky() {
     if (skyBuilt) return;
     skyBuilt = true;
     const sky = $('#invite-sky');
-    for (let i = 0; i < 46; i++) {                // 눈송이
-      const f = el('i', 'flake');
-      f.style.cssText = `left:${Math.random() * 100}%;--s:${(2 + Math.random() * 4).toFixed(1)}px;--d:${(7 + Math.random() * 9).toFixed(1)}s;--delay:${(-Math.random() * 16).toFixed(1)}s;--x:${(Math.random() * 60 - 30).toFixed(0)}px;opacity:${(0.35 + Math.random() * 0.6).toFixed(2)}`;
-      sky.append(f);
-    }
+    addSnow(sky, 46);
     for (let i = 0; i < 38; i++) {                // 반짝이는 별
       const s = el('i', 'star');
       s.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 60}%;--d:${(2 + Math.random() * 3).toFixed(1)}s;--delay:${(-Math.random() * 4).toFixed(1)}s`;
@@ -843,9 +846,18 @@
     if (game) { game.resume(); return; }
     if (gameLoading) return;
     gameLoading = true;
-    const loading = $('#game-loading');
+    // 로딩 화면: 준비가 빨리 끝나도 최소 5초는 보여 준다 (눈이 내리고, 금색 줄이 천천히 차오른다)
+    const loading = $('#game-loading'), bar = $('#gl-bar'), MIN_LOADING = 5000, t0 = performance.now();
+    if (!loading.dataset.snow) { loading.dataset.snow = '1'; addSnow($('#gl-snow'), 34, 0.8); }
     loading.hidden = false; loading.classList.remove('gone');
-    const doneLoading = () => { loading.classList.add('gone'); setTimeout(() => { loading.hidden = true; }, 700); };
+    bar.style.transition = 'none'; bar.style.width = '0%';
+    void bar.offsetWidth;
+    bar.style.transition = `width ${MIN_LOADING}ms cubic-bezier(.3, .1, .3, 1)`;
+    bar.style.width = '92%';
+    const doneLoading = () => setTimeout(() => {
+      bar.style.transition = 'width .35s ease'; bar.style.width = '100%';
+      setTimeout(() => { loading.classList.add('gone'); setTimeout(() => { loading.hidden = true; }, 700); }, 400);
+    }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
       const { startGame } = await import('./game.js');
