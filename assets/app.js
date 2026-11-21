@@ -346,6 +346,8 @@
     setTimeout(() => { gate.hidden = true; }, 1000);
     setTimeout(() => Petals.start(), reduceMotion ? 0 : 2200);
     setupReveals();
+    // Beomjun 전용 링크(#beomjun)로 들어오면 바로 광장으로
+    if (location.hash === '#beomjun' && c.game) setTimeout(() => enterGame('beomjun'), reduceMotion ? 0 : 1200);
   }
 
   /* ---------- 내용 채우기 ---------- */
@@ -431,8 +433,9 @@
     $('#cake-title').textContent = cake.title || '촛불 끄고, 소원 빌어 줘';
     buildCake($('#cake-svg'), cake.candles);
 
-    // 선물
+    // 선물 · 게임
     if (c.gift) renderGift(c.gift);
+    $('#game-invite-text').textContent = (c.game && c.game.invite) || '';
 
     // 크레딧
     const roll = $('#credits-roll');
@@ -736,51 +739,18 @@
     Petals.burst(r.left + r.width / 2, r.top + r.height * .22);
     cakeHint.textContent = '소원, 꼭 이루어질 거야';
     await wait(reduceMotion ? 300 : 2000);
-    if (state.content && state.content.gift) showGift(); else openCredits();
+    if (state.content && state.content.game) showGameInvite(); else openCredits();
   });
 
-  /* ---------- 선물 상자 + 자물쇠 문제 ---------- */
-  const gift = $('#gift'), giftBox = $('#gift-box'), coupon = $('#coupon');
+  /* ---------- 게임: 눈 내리는 밤 광장에서 선물 건네기 → 자물쇠 문제 → 쿠폰 ---------- */
+  const gameEl = $('#game'), sheet = $('#game-sheet'), coupon = $('#coupon'), toCredits = $('#to-credits');
   const quizBox = $('#quiz'), quizChoices = $('#quiz-choices'), quizForm = $('#quiz-form'), quizInput = $('#quiz-input'), quizMsg = $('#quiz-msg');
-  const quiz = { i: 0, list: [], busy: false };
+  const quiz = { i: 0, list: [], busy: false, done: false };
   const norm = s => String(s ?? '').toLowerCase().replace(/[\s.,!?~'"’]/g, '');
-
-  function buildGift(svg, n) {
-    let dots = '';
-    for (let i = 0; i < n; i++) dots += `<circle class="lock-dot" cx="${(120 + (i - (n - 1) / 2) * 9).toFixed(1)}" cy="177" r="2.6"/>`;
-    svg.innerHTML = `
-      <defs>
-        <linearGradient id="gbody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4526c"/><stop offset="1" stop-color="#93334d"/></linearGradient>
-        <linearGradient id="glid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8687f"/><stop offset="1" stop-color="#b84a64"/></linearGradient>
-        <linearGradient id="glock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eceef0"/><stop offset="1" stop-color="#b9bdc2"/></linearGradient>
-        <radialGradient id="gglow"><stop offset="0" stop-color="#ffe3a3" stop-opacity=".95"/><stop offset="1" stop-color="#ffe3a3" stop-opacity="0"/></radialGradient>
-      </defs>
-      <ellipse cx="120" cy="215" rx="96" ry="9" fill="#000" opacity=".4"/>
-      <circle class="gift-glow" cx="120" cy="92" r="96" fill="url(#gglow)"/>
-      <rect x="44" y="98" width="152" height="114" rx="6" fill="url(#gbody)"/>
-      <rect x="110" y="98" width="20" height="114" fill="#e2c07f"/>
-      <g class="gift-lid">
-        <rect x="36" y="76" width="168" height="30" rx="5" fill="url(#glid)"/>
-        <rect x="110" y="76" width="20" height="30" fill="#e8cb8f"/>
-        <path d="M120 74C96 44 66 52 78 72C85 82 108 78 120 74Z" fill="#e2c07f"/>
-        <path d="M120 74C144 44 174 52 162 72C155 82 132 78 120 74Z" fill="#e2c07f"/>
-        <path d="M118 76L104 100M122 76L136 100" stroke="#d3ad69" stroke-width="5" stroke-linecap="round"/>
-        <circle cx="120" cy="74" r="7.5" fill="#c9a35f"/>
-      </g>
-      <g class="gift-lock">
-        <path class="shackle" d="M107 154V141a13 13 0 0 1 26 0V154" fill="none" stroke="#c9ccd0" stroke-width="5.5" stroke-linecap="round"/>
-        <rect x="98" y="150" width="44" height="38" rx="7" fill="url(#glock)"/>
-        <circle cx="120" cy="163" r="3.4" fill="#5b5f66"/>
-        <rect x="118.5" y="164" width="3" height="6" rx="1.2" fill="#5b5f66"/>
-        ${dots}
-      </g>`;
-  }
+  let game = null, gameLoading = false;
 
   function renderGift(g) {
-    $('#gift-title').textContent = g.title || '선물이 도착했어';
-    $('#gift-sub').textContent = g.locked || '';
     quiz.list = Array.isArray(g.questions) ? g.questions : [];
-    buildGift(giftBox, quiz.list.length);
     const dotsEl = $('#quiz-dots');
     dotsEl.textContent = '';
     quiz.list.forEach(() => dotsEl.append(el('span')));
@@ -795,6 +765,65 @@
       d.append(el('dt', null, k), el('dd', null, v));
       terms.append(d);
     });
+  }
+
+  function showGameInvite() {
+    const inv = $('#game-invite');
+    inv.hidden = false;
+    setTimeout(() => {
+      const y = inv.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.45;
+      window.scrollTo({ top: Math.max(0, y), behavior: reduceMotion ? 'auto' : 'smooth' });
+    }, 80);
+  }
+
+  async function enterGame(role) {
+    const c = state.content || {};
+    const gc = c.game || {};
+    gameEl.hidden = false;
+    document.body.classList.add('locked');
+    Petals.stop();
+    if (game) { game.resume(); return; }
+    if (gameLoading) return;
+    gameLoading = true;
+    $('#game-status').textContent = '광장으로 가는 중…';
+    try {
+      const { startGame } = await import('./game.js');
+      const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
+      game = await startGame({
+        root: gameEl,
+        role,
+        room: gc.room || 'mybabyrobi',
+        names: { robi: (c.her && c.her.name) || 'Robi', beomjun: gc.me || 'Beomjun' },
+        brokers: broker ? [broker] : null,
+        onWantOpen: openGiftSheet,
+      });
+    } catch (e) {
+      console.error(e);
+      $('#game-status').textContent = '이 기기에서는 3D 광장이 열리지 않아서, 선물을 바로 열어 줄게.';
+      openGiftSheet();
+    } finally {
+      gameLoading = false;
+    }
+  }
+  function exitGame() {
+    if (game) game.pause();
+    sheet.hidden = true;
+    gameEl.hidden = true;
+    document.body.classList.remove('locked');
+    Petals.start();
+  }
+  $('#enter-game').addEventListener('click', () => enterGame('robi'));
+  $('#game-exit').addEventListener('click', exitGame);
+  $('#sheet-close').addEventListener('click', () => { sheet.hidden = true; });
+
+  function openGiftSheet() {
+    sheet.hidden = false;
+    if (quiz.done) { showCoupon(); return; }
+    coupon.hidden = true;
+    toCredits.hidden = true;
+    quizBox.hidden = false;
+    if (!quiz.list.length) { finishQuiz(); return; }
+    showQuestion();
   }
 
   function showQuestion() {
@@ -842,45 +871,41 @@
     quiz.busy = true;
     if (btn) btn.classList.add('right');
     quizMsg.textContent = '딸깍! 정답이야';
-    const giftDots = giftBox.querySelectorAll('.lock-dot'), panelDots = $('#quiz-dots').children;
-    if (giftDots[quiz.i]) giftDots[quiz.i].classList.add('on');
+    const panelDots = $('#quiz-dots').children;
     if (panelDots[quiz.i]) panelDots[quiz.i].classList.add('on');
     quiz.i++;
     setTimeout(() => {
       quiz.busy = false;
-      if (quiz.i < quiz.list.length) showQuestion(); else openGift();
+      if (quiz.i < quiz.list.length) showQuestion(); else finishQuiz();
     }, reduceMotion ? 300 : 950);
   }
   quizForm.addEventListener('submit', e => { e.preventDefault(); answer(quizInput.value); });
 
-  async function openGift() {
+  function finishQuiz() {
+    quiz.done = true;
     quizBox.classList.add('gone');
-    $('#gift-sub').textContent = '자물쇠가 열렸어!';
-    gift.classList.add('unlocked');
-    await wait(reduceMotion ? 0 : 1300);
-    quizBox.hidden = true;
-    gift.classList.add('opened');
-    const r = giftBox.getBoundingClientRect();
-    Petals.burst(r.left + r.width / 2, r.top + r.height * .4);
-    await wait(reduceMotion ? 0 : 1000);
-    coupon.hidden = false;
-    gift.classList.add('revealed');
-    await wait(reduceMotion ? 0 : 750);
-    giftBox.hidden = true;
-    $('#to-credits').hidden = false;
-  }
-
-  function showGift() {
-    gift.hidden = false;
-    if (quiz.list.length) showQuestion();
-    else quizBox.hidden = true;
     setTimeout(() => {
-      const y = gift.getBoundingClientRect().top + window.scrollY - 40;
-      window.scrollTo({ top: y, behavior: reduceMotion ? 'auto' : 'smooth' });
-    }, 80);
-    if (!quiz.list.length) setTimeout(openGift, reduceMotion ? 0 : 1600);
+      quizBox.hidden = true;
+      quizBox.classList.remove('gone');
+      if (game) {
+        sheet.hidden = true;           // 광장에서 선물이 열리는 장면을 먼저 보여 준다
+        game.openGift();
+        setTimeout(showCoupon, reduceMotion ? 0 : 1800);
+      } else {
+        showCoupon();
+      }
+    }, reduceMotion ? 0 : 500);
   }
-  $('#to-credits').addEventListener('click', () => openCredits());
+  function showCoupon() {
+    sheet.hidden = false;
+    quizBox.hidden = true;
+    coupon.hidden = false;
+    coupon.classList.remove('pop');
+    void coupon.offsetWidth;
+    coupon.classList.add('pop');
+    toCredits.hidden = false;
+  }
+  toCredits.addEventListener('click', () => { exitGame(); openCredits(); });
 
   /* ---------- 엔딩 크레딧 ---------- */
   const credits = $('#credits'), roll = $('#credits-roll'), finalCard = $('#credits-final'), skipBtn = $('#credits-skip');

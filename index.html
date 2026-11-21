@@ -119,43 +119,56 @@
     </button>
     <p class="hint" id="cake-hint">케이크를 탭하면 촛불이 꺼져</p>
 
-    <!-- 선물 상자: 자물쇠 문제를 다 맞히면 열린다 -->
-    <div class="gift" id="gift" hidden>
-      <h3 class="gift-title" id="gift-title"></h3>
-      <p class="hint" id="gift-sub"></p>
-      <div class="gift-stage">
-        <svg class="gift-box" id="gift-box" viewBox="0 0 240 228" aria-hidden="true"></svg>
-        <div class="coupon" id="coupon" hidden>
-          <div class="ticket-main">
-            <p class="eyebrow">GIFT COUPON</p>
-            <p class="coupon-title" id="coupon-title"></p>
-            <p class="coupon-body" id="coupon-body"></p>
-            <dl class="ticket-meta" id="coupon-terms"></dl>
-          </div>
-          <div class="ticket-stub" aria-hidden="true">
-            <span class="stub-admit">Gift</span>
-            <span class="stub-no" id="coupon-no"></span>
-          </div>
-        </div>
-      </div>
-      <div class="quiz" id="quiz">
-        <div class="quiz-head">
-          <span id="quiz-step"></span>
-          <span class="quiz-dots" id="quiz-dots" aria-hidden="true"></span>
-        </div>
-        <p class="quiz-q" id="quiz-q"></p>
-        <div class="quiz-choices" id="quiz-choices"></div>
-        <form class="quiz-form" id="quiz-form" autocomplete="off" novalidate hidden>
-          <input id="quiz-input" aria-label="정답" placeholder="정답 입력">
-          <button type="submit" class="gate-btn">확인</button>
-        </form>
-        <p class="quiz-msg" id="quiz-msg" role="status" aria-live="polite"></p>
-      </div>
-      <button type="button" class="btn-ghost" id="to-credits" hidden>엔딩 크레딧 보기</button>
+    <div class="game-invite" id="game-invite" hidden>
+      <p class="game-invite-text" id="game-invite-text"></p>
+      <button type="button" class="btn-enter" id="enter-game">게임 입장</button>
     </div>
   </section>
 
 </main>
+
+<!-- 게임: 눈 내리는 밤 광장 -->
+<div class="game" id="game" hidden>
+  <canvas class="game-canvas" id="game-canvas"></canvas>
+  <div class="game-top">
+    <button type="button" class="game-btn" id="game-exit">나가기</button>
+    <p class="game-status" id="game-status" role="status" aria-live="polite"></p>
+    <button type="button" class="game-btn" id="game-mode">한 폰으로</button>
+  </div>
+  <div class="joy-zone" id="joy-left" data-side="left"><span class="joy-base"><span class="joy-knob"></span></span></div>
+  <div class="joy-zone" id="joy-right" data-side="right" hidden><span class="joy-base"><span class="joy-knob"></span></span></div>
+  <p class="game-help" id="game-help"></p>
+  <button type="button" class="game-action" id="game-action" hidden></button>
+  <div class="game-sheet" id="game-sheet" hidden>
+    <button type="button" class="sheet-close" id="sheet-close" aria-label="닫기">&#10005;</button>
+    <div class="quiz" id="quiz">
+      <div class="quiz-head">
+        <span id="quiz-step"></span>
+        <span class="quiz-dots" id="quiz-dots" aria-hidden="true"></span>
+      </div>
+      <p class="quiz-q" id="quiz-q"></p>
+      <div class="quiz-choices" id="quiz-choices"></div>
+      <form class="quiz-form" id="quiz-form" autocomplete="off" novalidate hidden>
+        <input id="quiz-input" aria-label="정답" placeholder="정답 입력">
+        <button type="submit" class="gate-btn">확인</button>
+      </form>
+      <p class="quiz-msg" id="quiz-msg" role="status" aria-live="polite"></p>
+    </div>
+    <div class="coupon" id="coupon" hidden>
+      <div class="ticket-main">
+        <p class="eyebrow">GIFT COUPON</p>
+        <p class="coupon-title" id="coupon-title"></p>
+        <p class="coupon-body" id="coupon-body"></p>
+        <dl class="ticket-meta" id="coupon-terms"></dl>
+      </div>
+      <div class="ticket-stub" aria-hidden="true">
+        <span class="stub-admit">Gift</span>
+        <span class="stub-no" id="coupon-no"></span>
+      </div>
+    </div>
+    <button type="button" class="btn-ghost" id="to-credits" hidden>엔딩 크레딧 보기</button>
+  </div>
+</div>
 
 <!-- 상영관: 위아래 검은 띠가 들어오며 전체화면으로 -->
 <div class="cinema" id="cinema" hidden>

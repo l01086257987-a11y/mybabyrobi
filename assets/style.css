@@ -401,26 +401,7 @@ main { position: relative; z-index: 1; }
 .cc-range::-moz-range-progress { height: 3px; border-radius: 2px; background: var(--gold); }
 .cc-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--ivory); }
 
-/* ---------- 선물 상자 ---------- */
-.gift { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: 56px; animation: rise 1.1s cubic-bezier(.2, .7, .2, 1) both; }
-.gift-title { margin: 0; font-weight: 400; font-size: clamp(1.45rem, 6vw, 2rem); }
-.gift-stage { display: grid; place-items: center; width: 100%; }
-.gift-stage > * { grid-area: 1 / 1; }
-.gift-box { width: min(68vw, 250px); height: auto; overflow: visible; }
-.gift-box .gift-lid, .gift-box .gift-lock, .gift-box .shackle { transform-box: fill-box; }
-.gift-box .gift-lid { transform-origin: 50% 100%; }
-.gift-box .gift-lock { transform-origin: 50% 0; animation: dangle 2.6s ease-in-out infinite alternate; }
-.gift-box .shackle { transform-origin: 50% 100%; transition: transform .35s cubic-bezier(.3, 1.6, .5, 1); }
-.gift-box .gift-glow { opacity: 0; }
-.lock-dot { fill: #6f737a; transition: fill .3s ease; }
-.lock-dot.on { fill: #ffcf6b; }
-.gift.unlocked .shackle { transform: translateY(-8px); }
-.gift.unlocked .gift-lock { animation: lock-fall .9s ease-in .45s forwards; }
-.gift.opened .gift-lid { animation: lid-off 1s cubic-bezier(.3, .6, .3, 1) forwards; }
-.gift.opened .gift-glow { animation: glow-up 1.1s ease .15s forwards; }
-.gift.revealed .gift-box { animation: box-out .75s ease forwards; }
-.gift.revealed .coupon { animation: coupon-in 1.1s cubic-bezier(.2, .8, .2, 1.12) .15s both; }
-
+/* ---------- 쿠폰 · 자물쇠 문제 (게임 안 시트) ---------- */
 .coupon { display: flex; width: min(100%, 380px); filter: drop-shadow(0 24px 40px rgba(0, 0, 0, .55)); text-align: left; }
 .coupon-title { margin: 6px 0 0; font-family: var(--f-display); font-style: italic; font-size: 1.6rem; line-height: 1.15; color: var(--ink); text-wrap: balance; }
 .coupon-body { margin: 8px 0 0; font-size: .95rem; line-height: 1.6; color: var(--ink); }
@@ -461,6 +442,70 @@ main { position: relative; z-index: 1; }
 #quiz-input:focus { outline: none; border-bottom-color: var(--gold); background: rgba(226, 192, 127, .06); }
 .quiz-form .gate-btn { padding: 10px 16px; }
 .quiz-msg { min-height: 1.5em; margin: 0; font-size: .88rem; color: var(--petal); }
+
+/* ---------- 게임 입장 ---------- */
+.game-invite { display: grid; justify-items: center; gap: 14px; margin-top: 40px; animation: rise 1s cubic-bezier(.2, .7, .2, 1) both; }
+.game-invite-text { margin: 0; font-size: 1.05rem; text-wrap: balance; }
+.btn-enter {
+  padding: 15px 30px; border: 0; border-radius: 999px;
+  background: var(--gold); color: var(--night);
+  font-size: 1.05rem; font-weight: 700; letter-spacing: .02em; cursor: pointer;
+  box-shadow: 0 10px 34px -6px rgba(226, 192, 127, .55);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+/* ---------- 게임 화면 ---------- */
+.game { position: fixed; inset: 0; z-index: 57; overflow: hidden; background: #0b1328; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.game-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.game-top {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 3;
+  display: flex; align-items: center; gap: 8px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  pointer-events: none;
+}
+.game-top > * { pointer-events: auto; }
+.game-btn {
+  flex: none; padding: 8px 13px; border-radius: 999px; cursor: pointer;
+  background: rgba(11, 19, 40, .55); border: 1px solid rgba(244, 235, 225, .3); color: var(--ivory);
+  font-size: .8rem; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.game-status {
+  flex: 1; min-width: 0; margin: 0; padding: 7px 12px; border-radius: 16px;
+  text-align: center; font-size: .84rem; line-height: 1.4; color: var(--ivory); text-wrap: balance;
+  background: rgba(11, 19, 40, .62); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.joy-zone { position: absolute; left: 0; bottom: 0; z-index: 1; width: 100%; height: 62%; touch-action: none; }
+.game.local .joy-zone[data-side="left"] { width: 50%; }
+.game.local .joy-zone[data-side="right"] { left: 50%; width: 50%; }
+.joy-base {
+  position: absolute; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%;
+  border: 1.5px solid rgba(244, 235, 225, .5); background: rgba(244, 235, 225, .1);
+  opacity: 0; transition: opacity .15s ease; pointer-events: none;
+}
+.joy-zone.active .joy-base { opacity: 1; }
+.joy-knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(244, 235, 225, .9); box-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
+.game-help { position: absolute; left: 0; right: 0; z-index: 2; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); margin: 0; padding: 0 16px; text-align: center; font-size: .85rem; color: rgba(244, 235, 225, .85); text-shadow: 0 1px 8px rgba(0, 0, 0, .7); pointer-events: none; transition: opacity .6s ease; }
+.game-help.gone { opacity: 0; }
+.game-action {
+  position: absolute; z-index: 3; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  padding: 14px 24px; border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: var(--gold); color: var(--night); font-size: 1rem; font-weight: 700;
+  box-shadow: 0 10px 30px -6px rgba(226, 192, 127, .6);
+  animation: pulse-x 1.6s ease-in-out infinite;
+}
+.game-sheet {
+  position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; max-height: 86%; overflow-y: auto;
+  display: grid; justify-items: center; gap: 16px;
+  padding-top: 46px; padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: rgba(14, 10, 16, .94); border-top: 1px solid rgba(244, 235, 225, .14); border-radius: 18px 18px 0 0;
+  touch-action: pan-y; -webkit-user-select: text; user-select: text;
+  animation: sheet-up .45s cubic-bezier(.2, .8, .2, 1) both;
+}
+.sheet-close { position: absolute; top: 10px; right: max(12px, env(safe-area-inset-right, 0px)); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: transparent; border: 1px solid rgba(244, 235, 225, .25); color: var(--ivory); cursor: pointer; }
+.coupon.pop { animation: coupon-in 1.1s cubic-bezier(.2, .8, .2, 1.12) both; }
 
 /* ---------- 엔딩 크레딧 ---------- */
 .credits { position: fixed; inset: 0; z-index: 60; overflow: hidden; background: #000; color: var(--ivory); opacity: 0; transition: opacity 1.4s ease; }
@@ -532,12 +577,10 @@ main { position: relative; z-index: 1; }
 @keyframes ink { from { opacity: 0; transform: translateY(6px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes flicker { 0% { transform: scale(1, 1) skewX(0); } 50% { transform: scale(.9, 1.1) skewX(3deg); } 100% { transform: scale(1.05, .94) skewX(-3deg); } }
 @keyframes glow { from { opacity: .55; } to { opacity: .9; } }
-@keyframes dangle { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
-@keyframes lock-fall { to { transform: translate(14px, 80px) rotate(30deg); opacity: 0; } }
-@keyframes lid-off { to { transform: translate(-26px, -96px) rotate(-24deg); opacity: 0; } }
-@keyframes glow-up { from { opacity: 0; } 40% { opacity: 1; } to { opacity: .7; } }
-@keyframes box-out { to { transform: translateY(26px) scale(.86); opacity: 0; } }
 @keyframes coupon-in { from { opacity: 0; transform: translateY(70px) scale(.3) rotate(-8deg); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes pulse-x { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes smoke { 0% { opacity: 0; transform: translateY(0); } 25% { opacity: .75; } 100% { opacity: 0; transform: translateY(-38px); } }
 
 @media (prefers-reduced-motion: reduce) {
