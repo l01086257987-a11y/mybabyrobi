@@ -393,19 +393,22 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   const s = Math.sin(c.phase) * 0.55 * c.walk;
   c.legL.rotation.x = s; c.legR.rotation.x = -s;
   let lx = holding ? -1.15 : -s * 0.8, rx = holding ? -1.15 : s * 0.8;
-  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55, reach = 1, pucker = 0;
+  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55, reach = 1, pucker = 0, happy = 0;
   if (emo && emo.w > 0) {
     const w = emo.w, mix = (a, b) => a + (b - a) * w;
-    if (emo.type === 'hug') {
+    if (emo.part === 'hug') {
       // 팔끼리 부딪히지 않게 높이를 나눈다: side>0(Beomjun)은 허리를, side<0(Robi)은 목을 감싼다.
       // 짧은 팔로 상대 옆구리까지 닿도록 안는 동안만 팔을 늘린다. 머리는 서로 반대쪽으로 기댄다.
       const ax = side > 0 ? -1.15 : -1.75;
       lx = mix(lx, ax); rx = mix(rx, ax); lz = mix(lz, 0.1); rz = mix(rz, -0.1);
       reach = 1 + 0.6 * w; tilt = 0.24 * w * side; blush = 0.55 + 0.25 * w;
+    } else if (emo.part === 'kisser') {
+      // 볼에 뽀뽀하는 사람: 뒷짐 지고, 입술을 쭉 내밀고, 눈을 감고 0.1 기울인다 (자리와 맞춰 계산됨)
+      lx = mix(lx, 0.55); rx = mix(rx, 0.55); lz = mix(lz, 0.25); rz = mix(rz, -0.25);
+      lean = 0.1 * w; blush = 0.55 + 0.35 * w; pucker = w;
     } else {
-      // 얼굴이 딱 닿을 만큼만 몸을 기울이고(서 있는 거리와 맞춰 계산), 고개는 서로 반대로 갸웃
-      lx = mix(lx, -0.5); rx = mix(rx, -0.5); lz = mix(lz, 0.2); rz = mix(rz, -0.2);
-      lean = 0.07 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.4 * w; pucker = w;
+      // 받는 사람: 볼을 내민 채 웃으며 눈을 감고 볼이 더 빨개진다
+      blush = 0.55 + 0.45 * w; happy = w;
     }
   }
   const k = Math.min(1, dt * 12);
@@ -418,7 +421,7 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   c.head.rotation.z += (tilt - c.head.rotation.z) * k;
   c.blushM.opacity = blush;
   // 뽀뽀 표정: 웃는 입 대신 입술을 쭉 내밀고, 얼굴이 가까워지면 눈을 감는다
-  const shut = Math.max(0, Math.min(1, (pucker - 0.35) / 0.4));
+  const shut = Math.max(0, Math.min(1, (pucker - 0.35) / 0.4), Math.min(1, (happy - 0.2) / 0.4));
   for (const e of c.eyes) e.scale.y = 1.25 - 1.08 * shut;
   for (const h of c.shines) h.visible = shut < 0.5;
   const lp = Math.max(0, Math.min(1, (pucker - 0.2) / 0.45));
@@ -731,7 +734,7 @@ export async function startGame(o) {
     } else if (m.k === 'e') {
       if (m.t === 'give' && st.holder === 'beomjun') receiveGive();
       if (m.t === 'open' && !st.opened) playOpen(false);
-      if (m.t === 'hug' || m.t === 'kiss') startEmote(m.t, m.mx, m.mz, m.ang, false);
+      if (m.t === 'hug' || m.t === 'kiss') startEmote(m, false);
     }
   }
   function sendState(force) {
@@ -773,11 +776,12 @@ export async function startGame(o) {
     if (!mine) flash(`${ga(names.robi)} 선물을 열었어!`, 4000);
   }
 
-  // 안아주기 · 뽀뽀: 누가 눌러도 되고, 각자 폰이면 두 화면에서 같이 나온다
+  // 안아주기 · 볼 뽀뽀: 누가 눌러도 되고, 각자 폰이면 두 화면에서 같이 나온다
   const hugBtn = q('#game-hug'), kissBtn = q('#game-kiss');
-  // gap = 두 사람 사이 거리. 머리 지름이 0.68 이라 안기는 0.7(머리가 겹치지 않게),
-  // 뽀뽀는 0.9 에서 0.07 만큼 기울이면 머리 중심 사이가 0.70 → 얼굴은 안 닿고 내민 입술끼리 딱 닿는다
-  const EMOTE = { hug: { dur: 3.2, gap: 0.7, text: '꼬옥 🤗' }, kiss: { dur: 2.6, gap: 0.9, text: '쪽! 💋' } };
+  const EMOTE = { hug: { dur: 3.2, text: '꼬옥 🤗' }, kiss: { dur: 3, text: '볼에 쪽! 💋' } };
+  // 볼 뽀뽀 치수: 받는 사람은 카메라 쪽으로 0.8 돌아 볼(머리 중심에서 0.21, -0.12, 0.23)을 내밀고,
+  // 하는 사람은 0.1 기울였을 때 내민 입술 끝이 서 있는 자리에서 0.526 앞에 온다 → 그만큼 떨어져 서면 딱 닿는다
+  const KISS = { turn: 0.8, cheek: [0.21, -0.12, 0.23], reach: 0.526 };
   const constrain = (x, z) => {
     const r = Math.hypot(x, z);
     if (r > PLAZA_R - 0.5) { x *= (PLAZA_R - 0.5) / r; z *= (PLAZA_R - 0.5) / r; }
@@ -785,22 +789,51 @@ export async function startGame(o) {
     if (fd < need) { x = FOUNTAIN.x + (fx / fd) * need; z = FOUNTAIN.z + (fz / fd) * need; }
     return [x, z];
   };
-  function startEmote(type, mx, mz, ang, mine) {
-    const E = EMOTE[type];
-    if (st.emote || !E || ![mx, mz, ang].every(Number.isFinite)) return;
-    const [cx, cz] = constrain(mx, mz), dx = Math.sin(ang), dz = Math.cos(ang), h = E.gap / 2;
-    st.emote = { type, t: 0, dur: E.dur, w: 0, ang, popped: false, b: [cx - dx * h, cz - dz * h], r: [cx + dx * h, cz + dz * h] };
+  // 누른 쪽 화면에서 지금 위치로 계획을 세워 보낸다 (두 화면이 같은 계획으로 같은 장면을 그린다)
+  function planEmote(type) {
+    const b = chars.beomjun.pos, r = chars.robi.pos;
+    if (type === 'hug') {
+      return { t: 'hug', mx: +((b.x + r.x) / 2).toFixed(2), mz: +((b.z + r.z) / 2).toFixed(2), ang: b.x <= r.x ? Math.PI / 2 : -Math.PI / 2 };
+    }
+    const who = st.mode === 'online' ? st.role : 'beomjun', to = chars[other[who]].pos;
+    return { t: 'kiss', who, rx: +to.x.toFixed(2), rz: +to.z.toFixed(2), sd: chars[who].pos.x >= to.x ? 1 : -1 };
+  }
+  function layoutEmote(m) {
+    if (m.t === 'hug') {
+      if (![m.mx, m.mz, m.ang].every(Number.isFinite)) return null;
+      // 머리 지름 0.68 → 0.7 떨어져 좌우로 나란히 마주 본다 (카메라에 둘 다 옆모습)
+      const [cx, cz] = constrain(m.mx, m.mz), dx = Math.sin(m.ang), dz = Math.cos(m.ang);
+      return { pos: { beomjun: [cx - dx * 0.35, cz - dz * 0.35], robi: [cx + dx * 0.35, cz + dz * 0.35] },
+        ry: { beomjun: m.ang, robi: m.ang + Math.PI }, pop: [cx, 1.9, cz], delay: 0 };
+    }
+    if (m.t === 'kiss') {
+      if (![m.rx, m.rz, m.sd].every(Number.isFinite)) return null;
+      const who = m.who === 'robi' ? 'robi' : 'beomjun', to = other[who], sd = m.sd >= 0 ? 1 : -1;
+      const ryTo = sd * KISS.turn;
+      const cx0 = sd * KISS.cheek[0], cz0 = KISS.cheek[2];
+      const ox = cx0 * Math.cos(ryTo) + cz0 * Math.sin(ryTo), oz = -cx0 * Math.sin(ryTo) + cz0 * Math.cos(ryTo);
+      const on = Math.hypot(ox, oz), nx = ox / on, nz = oz / on;          // 볼이 바라보는 방향
+      let [rx, rz] = constrain(m.rx, m.rz);
+      let kx = rx + ox + nx * KISS.reach, kz = rz + oz + nz * KISS.reach;
+      const [ckx, ckz] = constrain(kx, kz);                               // 막히면 둘 다 같이 옮긴다
+      rx += ckx - kx; rz += ckz - kz; kx = ckx; kz = ckz;
+      return { who, pos: { [who]: [kx, kz], [to]: [rx, rz] }, ry: { [who]: Math.atan2(-nx, -nz), [to]: ryTo },
+        pop: [rx + ox + nx * 0.06, 1.68, rz + oz + nz * 0.06], delay: 0.55 };
+    }
+    return null;
+  }
+  function startEmote(m, mine) {
+    const E = m && EMOTE[m.t];
+    if (st.emote || !E) return;
+    const L = layoutEmote(m);
+    if (!L) return;
+    st.emote = { type: m.t, t: 0, dur: E.dur, w: 0, popped: false, ...L };
     joyL.reset(); joyR.reset();
     flash(E.text, E.dur * 1000 + 600);
-    if (mine && st.mode === 'online' && st.net) st.net.send('e', { r: st.role, t: type, mx: +cx.toFixed(2), mz: +cz.toFixed(2), ang: +ang.toFixed(3) });
+    if (mine && st.mode === 'online' && st.net) st.net.send('e', { r: st.role, ...m });
   }
-  // 카메라에서 둘 다 옆모습이 보이도록 좌우로 나란히 마주 보게 한다
-  const emoteHere = type => {
-    const b = chars.beomjun.pos, r = chars.robi.pos;
-    startEmote(type, (b.x + r.x) / 2, (b.z + r.z) / 2, b.x <= r.x ? Math.PI / 2 : -Math.PI / 2, true);
-  };
-  hugBtn.addEventListener('click', () => emoteHere('hug'));
-  kissBtn.addEventListener('click', () => emoteHere('kiss'));
+  hugBtn.addEventListener('click', () => startEmote(planEmote('hug'), true));
+  kissBtn.addEventListener('click', () => startEmote(planEmote('kiss'), true));
 
   actionBtn.addEventListener('click', () => {
     const act = actionBtn.dataset.act;
@@ -869,17 +902,19 @@ export async function startGame(o) {
     const em = st.emote;
     if (em) {
       em.t += dt;
-      em.w = Math.max(0, Math.min(1, em.t / 0.45, (em.dur - em.t) / 0.4));
-      const k = 1 - Math.exp(-dt * 8);
-      B.pos.x += (em.b[0] - B.pos.x) * k; B.pos.z += (em.b[1] - B.pos.z) * k;
-      R.pos.x += (em.r[0] - R.pos.x) * k; R.pos.z += (em.r[1] - R.pos.z) * k;
-      B.ry = em.ang; R.ry = em.ang + Math.PI;
-      B.moving = Math.hypot(em.b[0] - B.pos.x, em.b[1] - B.pos.z) > 0.05;   // 자리로 갈 땐 걸어서
-      R.moving = Math.hypot(em.r[0] - R.pos.x, em.r[1] - R.pos.z) > 0.05;
-      if (!em.popped && em.t > em.dur * (em.type === 'kiss' ? 0.42 : 0.3)) {
+      // 뽀뽀는 볼 옆까지 걸어간 뒤(delay) 기울인다
+      em.w = Math.max(0, Math.min(1, (em.t - em.delay) / 0.45, (em.dur - em.t) / 0.4));
+      const k = 1 - Math.exp(-dt * 7);
+      for (const role of ['beomjun', 'robi']) {
+        const c = chars[role], [tx, tz] = em.pos[role];
+        c.pos.x += (tx - c.pos.x) * k; c.pos.z += (tz - c.pos.z) * k;
+        c.ry = em.ry[role];
+        c.moving = Math.hypot(tx - c.pos.x, tz - c.pos.z) > 0.05;   // 자리로 갈 땐 걸어서
+      }
+      if (!em.popped && em.t > em.delay + (em.type === 'kiss' ? 0.5 : 0.9)) {
         em.popped = true;
-        const mx = (B.pos.x + R.pos.x) / 2, mz = (B.pos.z + R.pos.z) / 2;
-        if (em.type === 'kiss') { bigHeart(mx, 1.75, mz); burst(mx, 1.6, mz, 10); } else burst(mx, 1.9, mz, 22);
+        const [px, py, pz] = em.pop;
+        if (em.type === 'kiss') { bigHeart(px, py, pz); burst(px, py - 0.15, pz, 10); } else burst(px, py, pz, 22);
       }
       if (em.t >= em.dur) st.emote = null;
     }
@@ -935,10 +970,11 @@ export async function startGame(o) {
     if (st.opened && !st.opening) gift.glow.material.opacity = 0.35 + Math.sin(time * 3) * 0.1;
 
     const emo = st.emote ? { type: st.emote.type, w: st.emote.w } : null;
+    const part = role => (!st.emote ? null : st.emote.type === 'hug' ? 'hug' : st.emote.who === role ? 'kisser' : 'recv');
     gift.group.visible = !st.emote;                    // 안는 동안 선물은 잠깐 숨긴다
     B.label.sprite.visible = R.label.sprite.visible = !st.emote;
-    animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer && !emo, emo, 1);
-    animateChar(R, dt, time, st.holder === 'robi' && !st.transfer && !emo, emo, -1);
+    animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer && !emo, emo && { ...emo, part: part('beomjun') }, 1);
+    animateChar(R, dt, time, st.holder === 'robi' && !st.transfer && !emo, emo && { ...emo, part: part('robi') }, -1);
     for (const c of [B, R]) {
       const left = c.bubble.until - now;
       c.bubble.sprite.material.opacity = left > 0 ? Math.min(1, left / 400, (6000 - left) / 200) : 0;
