@@ -136,9 +136,10 @@ main { position: relative; z-index: 1; }
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 56px 110px;
 }
-.bloom { width: min(66vw, 300px); height: auto; overflow: visible; margin-bottom: 10px; }
-.bloom .p { transform-box: fill-box; transform-origin: 50% 100%; transform: rotate(var(--a)); }
-.bloom .core { transform-box: fill-box; transform-origin: 50% 50%; }
+.bloom { width: min(72vw, 310px); height: auto; overflow: visible; margin-bottom: 4px; transform-origin: 50% 84%; }
+.bloom .bq-f { transform-box: fill-box; transform-origin: 50% 50%; }
+.bloom .bq-back, .bloom .bq-front { transform-box: fill-box; transform-origin: 50% 100%; }
+.bloom .bq-bow { transform-box: fill-box; transform-origin: 50% 25%; }
 .opening-en { margin: 0; font-family: var(--f-display); font-style: italic; font-weight: 400; font-size: clamp(2.6rem, 11vw, 4.6rem); line-height: 1.05; letter-spacing: -.01em; color: var(--gold); }
 .opening-ko { margin: 8px 0 0; font-weight: 400; font-size: clamp(1.25rem, 5vw, 1.7rem); line-height: 1.4; text-wrap: balance; }
 .opening-date { margin: 10px 0 0; font-family: var(--f-mono); font-size: .76rem; letter-spacing: .32em; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -149,8 +150,10 @@ main { position: relative; z-index: 1; }
 }
 .scroll-cue::after { content: ""; width: 1px; height: 30px; background: linear-gradient(var(--muted), transparent); animation: cue 1.8s ease-in-out infinite; }
 
-.run .bloom .p { animation: petal-open 1.9s cubic-bezier(.22, .8, .24, 1) var(--d) both; }
-.run .bloom .core { animation: core-pop 1s cubic-bezier(.3, 1.6, .5, 1) 1.5s both; }
+.run .bloom .bq-back { animation: bq-rise 1.3s cubic-bezier(.22, .8, .24, 1) .05s both; }
+.run .bloom .bq-front { animation: bq-rise 1.2s cubic-bezier(.22, .8, .24, 1) .3s both; }
+.run .bloom .bq-f { animation: bq-bloom 1.5s cubic-bezier(.22, .8, .24, 1) var(--d) both; }
+.run .bloom .bq-bow { animation: core-pop 1s cubic-bezier(.3, 1.6, .5, 1) 1.9s both; }
 .run .bloom { animation: sway 8s ease-in-out 3.4s infinite alternate; }
 .run .opening-en { animation: rise 1.4s cubic-bezier(.2, .7, .2, 1) 2s both; }
 .run .opening-ko { animation: rise 1.4s cubic-bezier(.2, .7, .2, 1) 2.5s both; }
@@ -719,9 +722,10 @@ main { position: relative; z-index: 1; }
 @keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
 @keyframes tear { 30% { transform: translate(3px, -3px) rotate(4deg); } 100% { transform: translate(70px, 110px) rotate(32deg); opacity: 0; } }
 @keyframes settle { to { transform: translateY(8px) scale(.97); opacity: .0; } }
-@keyframes petal-open { from { transform: rotate(calc(var(--a) - 55deg)) scale(.06); opacity: 0; } to { transform: rotate(var(--a)) scale(1); opacity: 1; } }
 @keyframes core-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes sway { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+@keyframes sway { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+@keyframes bq-bloom { from { transform: rotate(-60deg) scale(.08); opacity: 0; } 55% { opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes bq-rise { from { transform: translateY(16px) scaleY(.55); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-out { to { opacity: 0; transform: scale(.6); } }

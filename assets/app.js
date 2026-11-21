@@ -172,33 +172,110 @@
     };
   })();
 
-  /* ---------- 오프닝 꽃 ---------- */
+  /* ---------- 오프닝 꽃다발: 작약(피오니) 다발을 SVG 로 그린다 ---------- */
   function buildBloom(svg) {
-    const rings = [
-      { n: 2, len: 124, w: 24, off: 148, gap: 64, d: 0, c: ['#9fbb93', '#4d6b4a'] },      // 잎
-      { n: 9, len: 112, w: 50, off: 0, d: .1, c: ['#f9dbe2', '#ec98ae'] },
-      { n: 8, len: 88, w: 42, off: 22, d: .38, c: ['#f6c6d2', '#e07c98'] },
-      { n: 7, len: 64, w: 34, off: 9, d: .66, c: ['#f1aebf', '#d26584'] },
-      { n: 6, len: 42, w: 24, off: 31, d: .94, c: ['#ea98ad', '#bf4d6e'] },
+    let seed = 20261122;
+    const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const R = (a, b) => a + rnd() * (b - a);
+    const f = n => n.toFixed(1);
+    // 사진 속 색: 연분홍 · 분홍 · 진분홍(자홍) · 흰빛
+    const pal = [
+      { tip: '#fbc9dc', mid: '#ec86b1', base: '#b33e6d', ball: ['#f09cbe', '#d9619a', '#9c3062'], w: 44 },
+      { tip: '#fde2ec', mid: '#f4a8c5', base: '#cc6690', ball: ['#f7c2d6', '#e78fb2', '#bd5d86'], w: 22 },
+      { tip: '#f8a6ca', mid: '#d8457f', base: '#86174a', ball: ['#e46c9e', '#c13472', '#7a1442'], w: 22 },
+      { tip: '#ffffff', mid: '#f9dce6', base: '#cf93a9', ball: ['#fdeef3', '#efc8d5', '#c78aa1'], w: 12 },
     ];
-    let defs = '', body = '';
-    rings.forEach((r, i) => {
-      defs += `<radialGradient id="bg${i}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="${r.len}">` +
-        `<stop offset="0" stop-color="${r.c[1]}"/><stop offset="1" stop-color="${r.c[0]}"/></radialGradient>`;
-      const L = r.len, w = r.w;
-      const d = `M0 0C${-w} ${-L * .3} ${-w * .95} ${-L * .95} ${-w * .35} ${-L}Q0 ${-L * .93} ${w * .35} ${-L}` +
-        `C${w * .95} ${-L * .95} ${w} ${-L * .3} 0 0Z`;
-      for (let k = 0; k < r.n; k++) {
-        const a = r.off + k * (r.gap || 360 / r.n);
-        body += `<path class="p" d="${d}" fill="url(#bg${i})" stroke="rgba(255,255,255,.22)" stroke-width=".6" style="--a:${a}deg;--d:${(r.d + k * .035).toFixed(3)}s"/>`;
-      }
+    let defs = '';
+    pal.forEach((p, i) => {
+      defs += `<linearGradient id="pp${i}" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${p.base}"/><stop offset=".55" stop-color="${p.mid}"/><stop offset="1" stop-color="${p.tip}"/></linearGradient>`;
+      defs += `<linearGradient id="pp${i}b" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${p.base}"/><stop offset=".7" stop-color="${p.mid}"/><stop offset="1" stop-color="${p.mid}"/></linearGradient>`;
+      defs += `<radialGradient id="pb${i}" cx=".42" cy=".38" r=".62"><stop offset="0" stop-color="${p.ball[0]}"/><stop offset=".6" stop-color="${p.ball[1]}"/><stop offset="1" stop-color="${p.ball[2]}"/></radialGradient>`;
     });
-    let core = '<g class="core"><circle r="10" fill="#f4d58d"/>';
-    for (let k = 0; k < 12; k++) {
-      const a = (k / 12) * Math.PI * 2;
-      core += `<circle cx="${(Math.cos(a) * 15).toFixed(2)}" cy="${(Math.sin(a) * 15).toFixed(2)}" r="2.3" fill="#e2a944"/>`;
+    defs += `<radialGradient id="pshade" cx=".5" cy=".5" r=".5"><stop offset=".55" stop-color="#5a0f2e" stop-opacity="0"/><stop offset="1" stop-color="#5a0f2e" stop-opacity=".32"/></radialGradient>
+      <radialGradient id="pheart" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#6b1033" stop-opacity=".55"/><stop offset="1" stop-color="#6b1033" stop-opacity="0"/></radialGradient>
+      <linearGradient id="wrapL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7d9d3"/><stop offset=".6" stop-color="#eebfb8"/><stop offset="1" stop-color="#d79e98"/></linearGradient>
+      <linearGradient id="wrapR" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4d0ca"/><stop offset=".55" stop-color="#e8b2ad"/><stop offset="1" stop-color="#cf918c"/></linearGradient>
+      <linearGradient id="tissue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9c2d6"/><stop offset="1" stop-color="#e98fb2"/></linearGradient>
+      <linearGradient id="tissue2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbd3e1"/><stop offset="1" stop-color="#f0a5c2"/></linearGradient>
+      <linearGradient id="leaf" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2f5a3d"/><stop offset="1" stop-color="#6d9a68"/></linearGradient>
+      <linearGradient id="satin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbc6d8"/><stop offset=".5" stop-color="#f08db1"/><stop offset="1" stop-color="#d8668f"/></linearGradient>`;
+
+    // 꽃잎 하나: 바닥(0,0)에서 위(-y)로, 끝이 물결처럼 주름진다
+    const petal = (w, h) => {
+      const b = () => R(0.94, 1.08);
+      return `M0 0C${f(-w * .58)} ${f(-h * .12)} ${f(-w * .64)} ${f(-h * .7)} ${f(-w * .42)} ${f(-h * .9)}` +
+        `Q${f(-w * .27)} ${f(-h * b())} ${f(-w * .1)} ${f(-h * .94)}Q${f(w * .06)} ${f(-h * b())} ${f(w * .22)} ${f(-h * .95)}` +
+        `Q${f(w * .38)} ${f(-h * b())} ${f(w * .45)} ${f(-h * .86)}C${f(w * .64)} ${f(-h * .64)} ${f(w * .56)} ${f(-h * .12)} 0 0Z`;
+    };
+    // 작약 한 송이: 둥근 공 위에 바깥 → 안쪽으로 점점 작은 꽃잎 고리를 겹친다
+    const peony = (r, pi) => {
+      let s = `<ellipse cx="${f(r * .1)}" cy="${f(r * .22)}" rx="${f(r * 1.08)}" ry="${f(r * 1.0)}" fill="#3a0a20" opacity=".34"/>`;
+      s += `<circle r="${f(r * .9)}" fill="url(#pb${pi})"/>`;
+      const rings = [[9, .22, .92, .64], [9, .15, .76, .54], [8, .09, .6, .46], [7, .05, .45, .38], [6, .02, .31, .3], [4, 0, .17, .21]];
+      let rot = R(0, 360);
+      rings.forEach(([n, dist, h, w], ri) => {
+        rot += 360 / n / 2 + R(-8, 8);
+        for (let k = 0; k < n; k++) {
+          const a = rot + k * 360 / n + R(-9, 9);
+          s += `<path d="${petal(r * w * R(.9, 1.12), r * h * R(.9, 1.08))}" fill="url(#pp${pi}${rnd() < .4 ? 'b' : ''})" stroke="${ri ? 'rgba(255,255,255,.3)' : 'rgba(130,25,65,.3)'}" stroke-width="${ri ? .5 : .8}" transform="rotate(${f(a)}) translate(0 ${f(-r * dist)})"/>`;
+        }
+        if (ri === 3) s += `<circle r="${f(r * .3)}" fill="url(#pheart)"/>`;
+      });
+      s += `<ellipse cx="${f(-r * .3)}" cy="${f(-r * .38)}" rx="${f(r * .32)}" ry="${f(r * .18)}" fill="#fff" opacity=".16" transform="rotate(-30 ${f(-r * .3)} ${f(-r * .38)})"/>`;
+      return s;
+    };
+    const pickPal = () => { const t = R(0, 100); let acc = 0; for (let i = 0; i < pal.length; i++) { acc += pal[i].w; if (t < acc) return i; } return 0; };
+    const leaf = (x, y, a, s) => `<path d="M0 0C${f(-14 * s)} ${f(-18 * s)} ${f(-12 * s)} ${f(-44 * s)} 0 ${f(-58 * s)}C${f(12 * s)} ${f(-44 * s)} ${f(14 * s)} ${f(-18 * s)} 0 0Z" fill="url(#leaf)" transform="translate(${x} ${y}) rotate(${a})"/>` +
+      `<path d="M0 -2L0 ${f(-54 * s)}" stroke="rgba(255,255,255,.18)" stroke-width=".8" transform="translate(${x} ${y}) rotate(${a})"/>`;
+
+    // 뒤: 분홍 얇은 포장지가 부채처럼 펼쳐지고, 잎이 살짝 보인다
+    let back = `<ellipse cx="0" cy="-34" rx="128" ry="104" fill="url(#tissue)"/>`;
+    back += `<path d="M-6 120L-150 -38Q-148 -92 -112 -112Z" fill="url(#tissue)" opacity=".95"/>`;
+    back += `<path d="M6 120L150 -40Q146 -96 108 -114Z" fill="url(#tissue)" opacity=".95"/>`;
+    back += `<path d="M0 120L-96 -128Q-30 -158 30 -150Z" fill="url(#tissue2)"/>`;
+    back += `<path d="M0 120L34 -152Q92 -148 112 -118Z" fill="url(#tissue2)"/>`;
+    back += `<path d="M-2 110L-118 -96M2 110L-40 -150M4 110L96 -128M6 110L140 -70" stroke="rgba(255,255,255,.28)" stroke-width="1.1" fill="none"/>`;
+    back += leaf(-112, -6, -64, 1.05) + leaf(116, -14, 62, 1) + leaf(-70, -104, -28, .9) + leaf(78, -100, 30, .85);
+
+    // 꽃: 돔 모양으로 촘촘히 (위·뒤쪽부터 그려서 아래·앞쪽 꽃이 위에 겹치게)
+    const spots = [];
+    const sp = 39;
+    for (let row = -4; row <= 4; row++) {
+      const y = -30 + row * sp * .8;
+      for (let col = -4; col <= 4; col++) {
+        const x = col * sp + (row % 2 ? sp / 2 : 0);
+        const ex = x / 116, ey = (y + 34) / 94;
+        if (ex * ex + ey * ey > 1 || y > 28) continue;
+        spots.push([x + R(-5, 5), y + R(-5, 5)]);
+      }
     }
-    svg.innerHTML = `<defs>${defs}</defs>${body}${core}</g>`;
+    spots.sort((a, b) => a[1] - b[1]);
+    let flowers = '';
+    spots.forEach(([x, y], i) => {
+      const r = R(31, 36);
+      flowers += `<g transform="translate(${f(x)} ${f(y)}) scale(1 ${f(.9 + .1 * Math.max(0, -y) / 120)})"><g class="bq-f" style="--d:${(.55 + i * .05).toFixed(2)}s">${peony(r, pickPal())}</g></g>`;
+    });
+
+    // 앞: 크래프트빛 분홍 포장지 두 장이 V 자로 겹치고, 리본으로 묶는다
+    let front = '';
+    front += `<path d="M-124 -4Q-86 30 -20 40Q16 44 50 36L20 128L-20 128Z" fill="url(#wrapL)"/>`;
+    front += `<path d="M124 -6Q86 32 24 42Q-12 46 -48 38L-20 128L20 128Z" fill="url(#wrapR)"/>`;
+    front += `<path d="M-124 -4Q-86 30 -20 40Q16 44 50 36" fill="none" stroke="rgba(90,20,40,.18)" stroke-width="4" transform="translate(0 4)"/>`;
+    front += `<path d="M124 -6Q86 32 24 42Q-12 46 -48 38" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>`;
+    front += `<path d="M-60 34L-12 124M64 32L14 124" stroke="rgba(120,60,60,.14)" stroke-width="1.2"/>`;
+    front += `<path d="M-20 128L-34 168L34 168L20 128Z" fill="url(#wrapR)"/><path d="M-34 168L34 168" stroke="rgba(120,60,60,.18)"/>`;
+    const bow = `<g class="bq-bow">
+      <path d="M-4 128C-30 104 -62 108 -58 128C-55 146 -26 142 -4 132Z" fill="url(#satin)"/>
+      <path d="M4 128C30 104 62 108 58 128C55 146 26 142 4 132Z" fill="url(#satin)"/>
+      <path d="M-46 122C-36 116 -22 120 -10 128" stroke="rgba(255,255,255,.5)" stroke-width="1.4" fill="none"/>
+      <path d="M46 122C36 116 22 120 10 128" stroke="rgba(255,255,255,.5)" stroke-width="1.4" fill="none"/>
+      <path d="M-5 133L-26 176L-16 172L-10 182L2 135Z" fill="url(#satin)"/>
+      <path d="M5 133L24 178L14 173L9 184L-2 135Z" fill="url(#satin)"/>
+      <rect x="-8" y="122" width="16" height="15" rx="5" fill="#e87ea6"/>
+      <rect x="-5" y="124" width="5" height="11" rx="2.5" fill="rgba(255,255,255,.35)"/>
+    </g>`;
+    svg.setAttribute('viewBox', '-150 -160 300 350');
+    svg.innerHTML = `<defs>${defs}</defs><g class="bq-back">${back}</g><g class="bq-flowers">${flowers}</g><g class="bq-front">${front}</g>${bow}`;
   }
 
   /* ---------- 케이크 ---------- */
