@@ -231,7 +231,8 @@ main { position: relative; z-index: 1; }
   transform: rotate(-2.2deg);
   box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
 }
-.real-photo img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: #ded3c5; }
+.real-photo img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: #ded3c5; }
+.real-photo.no-cap { padding-bottom: 44px; } /* 글이 없어도 폴라로이드처럼 아래 여백은 넓게 */
 .real-photo figcaption { padding: 12px 4px 16px; font-family: var(--f-hand); font-size: 1rem; line-height: 1.5; color: var(--ink); }
 .real.show .real-photo { animation: develop 2.6s ease both; }
 

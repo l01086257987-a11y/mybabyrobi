@@ -379,6 +379,9 @@
     note.hidden = Boolean(m.video) || !note.children.length;
     if (md) $('#date-stamp').textContent = `'${String(md.getFullYear()).slice(2)} ${md.getMonth() + 1} ${md.getDate()}`;
     $('#real-caption').textContent = m.realCaption || '';
+    $('#real-caption').hidden = !m.realCaption;
+    $('.real-photo').classList.toggle('no-cap', !m.realCaption);
+    if (m.realAlt) $('#real-img').alt = m.realAlt;
     if (!m.video) screenEl.hidden = true;
 
     // S#2
