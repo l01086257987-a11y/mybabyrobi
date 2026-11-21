@@ -315,7 +315,9 @@ main { position: relative; z-index: 1; }
   border-radius: 2px;
   box-shadow: 0 34px 70px -24px rgba(0, 0, 0, .65);
 }
-.letter p { margin: 0; }
+.letter p { margin: 0; white-space: pre-line; text-wrap: pretty; }
+.letter .letter-to { font-weight: 700; }
+.letter .letter-closing { text-align: center; font-size: 1.22rem; font-weight: 700; color: var(--rose); }
 .letter .letter-from { text-align: right; }
 .letter .letter-date { margin-top: calc(var(--lh) * -1); text-align: right; font-size: .9rem; color: var(--ink-soft); }
 .letter.show { animation: unfold .9s cubic-bezier(.2, .7, .2, 1) both; }

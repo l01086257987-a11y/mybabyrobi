@@ -429,6 +429,7 @@
     const line = (cls, text) => { if (!text) return; const p = el('p', cls, text); p.style.setProperty('--i', i++); paper.append(p); };
     line('letter-to', L.to);
     (L.paragraphs || []).forEach(p => line('', p));
+    line('letter-closing', L.closing);
     line('letter-from', L.from);
     line('letter-date', L.date);
 
