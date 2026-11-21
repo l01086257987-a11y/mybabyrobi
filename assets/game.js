@@ -59,6 +59,9 @@ function buildWorld(scene) {
   const moonLight = new THREE.DirectionalLight('#c9d8ff', 0.9);
   moonLight.position.set(-8, 14, -10);
   scene.add(moonLight);
+  const fill = new THREE.DirectionalLight('#ffe9d6', 1.1); // 카메라 쪽에서 비추는 은은한 빛: 얼굴이 어둡지 않게
+  fill.position.set(2, 7, 12);
+  scene.add(fill);
 
   const snowM = std('#eef3f9', { roughness: 1 });
   const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48), std('#d7e0ec', { roughness: 1 }));
@@ -260,6 +263,42 @@ function makeLabel(name) {
   return { sprite, draw: redraw };
 }
 
+function makeBubble() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 256;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
+  sprite.renderOrder = 11;
+  sprite.center.set(0.5, 0);
+  const show = text => {
+    const g = canvas.getContext('2d');
+    g.clearRect(0, 0, 512, 256);
+    g.font = '700 44px "Gowun Batang", "Apple SD Gothic Neo", sans-serif';
+    // 글자 단위로 줄바꿈 (최대 3줄)
+    const lines = [];
+    let line = '';
+    for (const ch of text) {
+      if (g.measureText(line + ch).width > 420) { lines.push(line); line = ch.trim() ? ch : ''; if (lines.length === 3) break; }
+      else line += ch;
+    }
+    if (lines.length < 3 && line) lines.push(line);
+    else if (lines.length === 3 && line) lines[2] = lines[2].slice(0, -1) + '…';
+    const w = Math.min(470, Math.max(...lines.map(l => g.measureText(l).width)) + 56), h = lines.length * 50 + 34;
+    const x = (512 - w) / 2, y = 256 - h - 26, r = 26;
+    g.fillStyle = 'rgba(255, 252, 247, 0.96)';
+    g.beginPath();
+    g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.lineTo(276, y + h); g.lineTo(256, 252); g.lineTo(240, y + h);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill();
+    g.fillStyle = '#2a1d20'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    lines.forEach((l, i) => g.fillText(l, 256, y + 17 + 25 + i * 50));
+    tex.needsUpdate = true;
+  };
+  sprite.scale.set(2.5, 1.25, 1);
+  return { sprite, show, until: 0 };
+}
+
 function makeChar(o) {
   const g = new THREE.Group();
   const rig = new THREE.Group();
@@ -336,8 +375,10 @@ function makeChar(o) {
 
   const label = makeLabel(o.name);
   label.sprite.position.y = 2.2; g.add(label.sprite);
+  const bubble = makeBubble();
+  bubble.sprite.position.y = 2.45; g.add(bubble.sprite);
 
-  return { group: g, rig, legL, legR, armL, armR, label, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
+  return { group: g, rig, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
 }
 
 function animateChar(c, dt, t, holding) {
@@ -543,11 +584,68 @@ export async function startGame(o) {
     if (text !== shownStatus) { statusEl.textContent = text; shownStatus = text; }
   };
 
+  // 채팅: 입장 날짜로 만든 열쇠로 암호화해서 보낸다 (공개 중계 서버에는 알아볼 수 없는 글자만)
+  const chatBtn = q('#game-chat-btn'), chatForm = q('#game-chat'), chatInput = q('#chat-input'), chatLog = q('#chat-log');
+  const te = new TextEncoder();
+  let chatKey = null;
+  const getChatKey = async () => {
+    if (!chatKey) {
+      const base = await crypto.subtle.importKey('raw', te.encode(o.secret || o.room), 'PBKDF2', false, ['deriveKey']);
+      chatKey = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: te.encode(`mbr-chat/${o.room}`), iterations: 120000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    }
+    return chatKey;
+  };
+  const b64 = u8 => btoa(String.fromCharCode(...u8));
+  const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  async function seal(text) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await getChatKey(), te.encode(text)));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return b64(out);
+  }
+  async function unseal(s) {
+    const u = unb64(s);
+    return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.subarray(0, 12) }, await getChatKey(), u.subarray(12)));
+  }
+  function showChat(role, text) {
+    const c = chars[role];
+    if (!c) return;
+    c.bubble.show(text);
+    c.bubble.until = performance.now() + 6000;
+    const line = document.createElement('p');
+    const who = document.createElement('b');
+    who.textContent = names[role];
+    line.append(who, ` ${text}`);
+    chatLog.append(line);
+    while (chatLog.children.length > 4) chatLog.firstChild.remove();
+    setTimeout(() => { line.classList.add('gone'); setTimeout(() => line.remove(), 600); }, 12000);
+  }
+  async function sendChat(text) {
+    text = text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!text) return;
+    showChat(st.role, text);
+    if (st.mode === 'online' && st.net && st.net.connected) {
+      try { st.net.send('c', { r: st.role, c: await seal(text) }); } catch (e) { console.warn(e); }
+    }
+  }
+  const openChat = () => { chatForm.hidden = false; chatBtn.hidden = true; helpEl.classList.add('gone'); chatInput.focus(); };
+  const closeChat = () => { chatForm.hidden = true; chatBtn.hidden = st.mode !== 'online'; chatInput.blur(); };
+  chatBtn.addEventListener('click', openChat);
+  q('#chat-close').addEventListener('click', closeChat);
+  chatForm.addEventListener('submit', e => { e.preventDefault(); const t = chatInput.value; chatInput.value = ''; sendChat(t); });
+  // 휴대폰 키보드가 올라오면 입력창을 그 위로
+  const vv = window.visualViewport;
+  const onVV = () => root.style.setProperty('--kb', `${vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0}px`);
+  if (vv) { vv.addEventListener('resize', onVV); vv.addEventListener('scroll', onVV); }
+
   // 모드 전환
   function applyMode() {
     const local = st.mode === 'local';
     root.classList.toggle('local', local);
     q('#joy-right').hidden = !local;
+    chatForm.hidden = true;
+    chatBtn.hidden = local;
     modeBtn.textContent = local ? '각자 폰으로' : '한 폰으로';
     helpEl.textContent = local
       ? `왼쪽은 ${names.beomjun}, 오른쪽은 ${names.robi}. 화면을 꾹 누른 채로 움직여`
@@ -583,7 +681,9 @@ export async function startGame(o) {
   function onNet(m) {
     if (st.mode !== 'online' || m.r === st.role || !chars[m.r]) return;
     st.otherSeen = performance.now();
-    if (m.k === 'p') {
+    if (m.k === 'c' && typeof m.c === 'string') {
+      unseal(m.c).then(t => showChat(m.r, t)).catch(() => { /* 열쇠가 다르면 무시 */ });
+    } else if (m.k === 'p') {
       st.remote = { x: m.x, z: m.z, ry: m.ry, m: !!m.m };
       if (m.r === 'beomjun' && m.g === 'robi' && st.holder === 'beomjun') receiveGive();
       if (m.r === 'robi' && m.o && !st.opened) playOpen(false);
@@ -745,6 +845,10 @@ export async function startGame(o) {
 
     animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer);
     animateChar(R, dt, time, st.holder === 'robi' && !st.transfer);
+    for (const c of [B, R]) {
+      const left = c.bubble.until - now;
+      c.bubble.sprite.material.opacity = left > 0 ? Math.min(1, left / 400, (6000 - left) / 200) : 0;
+    }
 
     // 하트
     for (let i = hearts.length - 1; i >= 0; i--) {
@@ -787,6 +891,7 @@ export async function startGame(o) {
   }
   function pause() {
     running = false;
+    closeChat();
     if (raf) cancelAnimationFrame(raf);
     raf = 0; joyL.reset(); joyR.reset(); keys.clear();
   }

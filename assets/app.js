@@ -315,6 +315,7 @@
       if (!state.contentBuf) state.contentBuf = await fetchBytes('data/content.bin');
       const plain = await decrypt(key, state.contentBuf);
       state.key = key;
+      state.pw = pw; // 게임 채팅 암호화에 쓴다 (메모리에만)
       state.content = JSON.parse(new TextDecoder().decode(plain));
     } catch (e) {
       gateBtn.disabled = false;
@@ -796,6 +797,7 @@
         names: { robi: (c.her && c.her.name) || 'Robi', beomjun: gc.me || 'Beomjun' },
         brokers: broker ? [broker] : null,
         onWantOpen: openGiftSheet,
+        secret: state.pw,
       });
     } catch (e) {
       console.error(e);
