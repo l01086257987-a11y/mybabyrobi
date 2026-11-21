@@ -519,6 +519,16 @@ main { position: relative; z-index: 1; }
   border: 1px solid rgba(255, 240, 200, .6); background: rgba(11, 19, 40, .78); color: var(--ivory);
   font-size: .95rem; font-weight: 700; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
+.game-board {
+  position: absolute; z-index: 3; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  padding: 12px 22px; border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: #ffd23f; color: #1b1d24; font-size: .95rem; font-weight: 700;
+  box-shadow: 0 10px 26px -6px rgba(255, 210, 63, .55);
+  animation: board-in .35s ease both;
+}
+@keyframes board-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translateX(-50%); } }
+.game-board[data-act="off"] { background: rgba(11, 19, 40, .78); color: var(--ivory); border: 1px solid rgba(244, 235, 225, .5); box-shadow: none; }
+.game-board:active { transform: translateX(-50%) scale(.95); }
 
 /* 안아주기 · 뽀뽀 */
 .game-emotes {

@@ -392,7 +392,8 @@ function makeChar(o) {
   const bubble = makeBubble();
   bubble.sprite.position.y = 2.45; g.add(bubble.sprite);
 
-  return { group: g, rig, head, blushM, eyes, shines, mouth, lips, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '', seat: -1, sitW: 0 };
+  return { group: g, rig, head, blushM, eyes, shines, mouth, lips, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '', seat: -1, sitW: 0,
+    baseY: 0, boarded: false, path: null, onArrive: null, endRy: undefined };
 }
 
 // emo: { type: 'hug' | 'kiss', w: 0~1 } — 안기·뽀뽀 자세를 w 만큼 섞는다. side: 고개를 기울일 방향(±1)
@@ -447,7 +448,7 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
     c.legL.rotation.x += (-1.25 + kick - c.legL.rotation.x) * sw;
     c.legR.rotation.x += (-1.25 - kick - c.legR.rotation.x) * sw;
   }
-  c.pos.y = 0.13 * sw;                             // 엉덩이를 벤치 높이로
+  c.pos.y = c.baseY + 0.13 * sw;                   // 엉덩이를 벤치 높이로 (버스 안이면 버스 바닥 위)
   c.group.rotation.y = angLerp(c.group.rotation.y, c.ry, Math.min(1, dt * 12));
 }
 const handPos = (c, out) => out.set(c.pos.x + Math.sin(c.group.rotation.y) * 0.42, 0.84 + c.rig.position.y + c.pos.y, c.pos.z + Math.cos(c.group.rotation.y) * 0.42);
@@ -549,8 +550,12 @@ async function connectNet(urls, room, onMsg, onChange) {
 // 장소는 서로 멀리 떨어진 곳에 만들어 두고, 캐릭터를 옮겨서 이동한다 (x 좌표로 어디에 있는지 안다)
 const AREA = { bus: { x: 300, z: 0 }, cinema: { x: -300, z: 0 } };
 const areaOf = x => (x > 150 ? 'bus' : x < -150 ? 'cinema' : 'plaza');
-const STOP = { x: 2.4, z: 9.0, w: 3.0, d: 1.5, wait: 15 };   // 버스정류장 칸 (광장 남쪽 끝), 15초 기다리면 버스
-const ROAD_Z = 13;                                             // 광장 남쪽 도로
+const STOP_SIZE = { w: 3.0, d: 1.5, wait: 15 };               // 정류장 칸, 15초 기다리면 버스
+// 광장 남쪽 끝 → 영화관 / 영화관 앞(뒤쪽 출입구 밖) → 광장
+const STOPS = {
+  plaza: { key: 'plaza', area: 'plaza', cx: 0, x: 2.4, z: 9.0, roadZ: 13.0, to: 'cinema', sign: '영화관 행 →' },
+  cinema: { key: 'cinema', area: 'cinema', cx: AREA.cinema.x, x: AREA.cinema.x + 2.4, z: 8.7, roadZ: 12.9, to: 'plaza', sign: '광장 행 →' },
+};
 const RIDE_SEC = 60;                                           // 영화관까지 1분
 const BUS = { L: 9, W: 2.6, floorY: 0.55, door: -2.7 };        // door: 문 가운데 (버스 기준 x)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -578,16 +583,17 @@ function makeTree(s = 1) {
 }
 
 // 버스정류장: 바닥 칸 + 시계 방향으로 차는 노란 테두리 + 'BUS STOP' + 표지판 + 도로
-function buildBusStop(scene) {
+function buildBusStop(scene, S) {
+  const STOP = { ...STOP_SIZE, x: S.x, z: S.z }, ROAD_Z = S.roadZ;
   const g = new THREE.Group();
   scene.add(g);
   const flat = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); g.add(m); return m; };
   // 도로와 차선
-  flat(new THREE.PlaneGeometry(110, 4.8), std('#3a3e4a', { roughness: 0.95 }), 0, 0.012, ROAD_Z);
+  flat(new THREE.PlaneGeometry(110, 4.8), std('#3a3e4a', { roughness: 0.95 }), S.cx, 0.012, ROAD_Z);
   const dashM = new THREE.MeshBasicMaterial({ color: '#e9e4d6' });
-  for (let x = -54; x < 54; x += 3) flat(new THREE.PlaneGeometry(1.4, 0.12), dashM, x, 0.016, ROAD_Z);
+  for (let x = -54; x < 54; x += 3) flat(new THREE.PlaneGeometry(1.4, 0.12), dashM, S.cx + x, 0.016, ROAD_Z);
   const curb = new THREE.Mesh(new THREE.BoxGeometry(110, 0.16, 0.3), std('#eef3f9', { roughness: 1 }));
-  curb.position.set(0, 0.08, ROAD_Z - 2.55); g.add(curb);
+  curb.position.set(S.cx, 0.08, ROAD_Z - 2.55); g.add(curb);
   // 칸 안 'BUS STOP'
   const mark = canvasTex(512, 160, (c, w, h) => {
     c.clearRect(0, 0, w, h);
@@ -631,7 +637,7 @@ function buildBusStop(scene) {
   disc.rotation.x = Math.PI / 2; disc.position.set(x1 + 0.35, 2.55, z0 - 0.045); g.add(disc);   // 기둥(z0-0.1, 굵기 0.05)보다 앞에
   const face = new THREE.Mesh(new THREE.CircleGeometry(0.36, 28), new THREE.MeshBasicMaterial({ map: plateTex('BUS', '#2f6fd6', '#ffffff', 256, 256, 96) }));
   face.position.set(x1 + 0.35, 2.55, z0 - 0.015); g.add(face);   // 글씨가 바로 서 보이게 평평한 판에
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.26), new THREE.MeshBasicMaterial({ map: plateTex('영화관 행 →', '#1b1d24', '#ffd23f', 512, 148, 66) }));
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.26), new THREE.MeshBasicMaterial({ map: plateTex(S.sign, '#1b1d24', '#ffd23f', 512, 148, 66) }));
   board.position.set(x1 + 0.35, 1.95, z0 - 0.015); g.add(board);   // 기둥 앞에 붙여서 글자가 가려지지 않게
   return { setProgress(p) { fill.mesh.geometry.setDrawRange(0, Math.floor(fill.n * clamp(p, 0, 1)) * 6); } };
 }
@@ -659,7 +665,10 @@ function makeBus() {
     const h = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), new THREE.MeshStandardMaterial({ color: '#fff6d8', emissive: '#ffe9a8', emissiveIntensity: 1.6 }));
     h.position.set(-L / 2 - 0.02, 0.45, z); h.scale.x = 0.4; g.add(h);
   });
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.34), new THREE.MeshBasicMaterial({ map: plateTex('영화관  CINEMA', '#1b1d24', '#ffcf5a') }));
+  const signTex = {}, signMat = new THREE.MeshBasicMaterial();
+  const setSign = text => { signTex[text] = signTex[text] || plateTex(text, '#1b1d24', '#ffcf5a'); signMat.map = signTex[text]; signMat.needsUpdate = true; };
+  setSign('영화관  CINEMA');
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.34), signMat);
   sign.rotation.y = -Math.PI / 2; sign.position.set(-L / 2 - 0.01, floorY + wallH + 0.12, 0); g.add(sign);
   const door = box(1.36, wallH, 0.06, new THREE.MeshStandardMaterial({ color: '#3a4a5c', transparent: true, opacity: 0.55, roughness: 0.2 }), BUS.door, wy, -W / 2 + 0.02);
   const wheels = [];
@@ -678,7 +687,7 @@ function makeBus() {
     box(0.34, 0.34, 0.34, dark, x, floorY + 0.17, z);
     seatLocal.push({ x: x + 0.02, z, ry: -Math.PI / 2 });
   }));
-  return { group: g, wheels, door, seatLocal };
+  return { group: g, wheels, door, seatLocal, setSign };
 }
 const spinWheels = (bus, dist) => { for (const w of bus.wheels) w.rotation.y -= dist / 0.42; };
 
@@ -721,6 +730,7 @@ function buildRide(scene) {
   let t = 0;
   return {
     seats,
+    setSign: bus.setSign,
     update(dt) {
       const v = 9 * dt; t += dt;
       roadTex.offset.x -= v / 8;
@@ -759,6 +769,22 @@ function buildCinema(scene) {
   [-5.95, 5.95].forEach(x => add(new THREE.BoxGeometry(1.3, 6.2, 0.3), curtainM, x, 3.1, -6.1));
   const sconceM = new THREE.MeshStandardMaterial({ color: '#ffe2a8', emissive: '#ffc670', emissiveIntensity: 1.8 });
   [-3, 0.5, 4].forEach(z => [-7.02, 7.02].forEach(x => add(new THREE.SphereGeometry(0.14, 12, 10), sconceM, x, 2.6, z)));
+  // 뒤쪽 출입구 밖: 눈 덮인 인도 (정류장·도로는 buildBusStop 이 만든다), 출입구 위 간판
+  const out = new THREE.Mesh(new THREE.PlaneGeometry(90, 40), std('#d7e0ec', { roughness: 1 }));
+  out.rotation.x = -Math.PI / 2; out.position.set(0, 0.002, 27.1); g.add(out);
+  const pillarM = std('#2a1822', { roughness: 0.8 });
+  [-7.45, 7.45].forEach(x => add(new THREE.BoxGeometry(1.0, 5.2, 0.5), pillarM, x, 2.6, 7.05));
+  const neon = canvasTex(128, 512, (c, w, h) => {                  // 세로 네온 간판
+    c.fillStyle = '#1a1018'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#ffd58a'; c.shadowColor = '#ffb347'; c.shadowBlur = 18;
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '800 70px "Helvetica Neue", Arial, sans-serif';
+    'CINEMA'.split('').forEach((ch, i) => c.fillText(ch, w / 2, 48 + i * 83));
+  });
+  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 2.5), new THREE.MeshBasicMaterial({ map: neon, toneMapped: false }));
+  blade.position.set(-7.45, 2.6, 7.31); g.add(blade);
+  [[-12, 17.5, 1.1], [-5, 19, 1.3], [3, 18, 0.9], [9.5, 17.2, 1.2], [15, 19.5, 1.0], [-17, 19.8, 1.25]].forEach(([x, z, s]) => {
+    const t = makeTree(s); t.position.set(x, 0, z); g.add(t);
+  });
   const seatM = std('#b3263e', { roughness: 0.75 }), armM = std('#3a1620'), seats = [];
   [0.4, 1.9, 3.4].forEach(z => [-3.6, -2.8, -2.0, 2.0, 2.8, 3.6].forEach(x => {     // 스크린(-z)을 보고 앉는다
     add(new THREE.BoxGeometry(0.66, 0.14, 0.6), seatM, x, 0.42, z);
@@ -799,9 +825,9 @@ export async function startGame(o) {
     seats.push({ x: bn.x + lx * Math.cos(bn.ry) + lz * Math.sin(bn.ry), z: bn.z - lx * Math.sin(bn.ry) + lz * Math.cos(bn.ry), ry: bn.ry });
   }));
   // 버스정류장 · 광장에 들어오는 버스 · 달리는 버스 안 · 영화관 (좌석 번호는 두 화면이 같은 순서)
-  const stop = buildBusStop(scene);
-  const plazaBus = makeBus();
-  plazaBus.group.visible = false; scene.add(plazaBus.group);
+  const stops = { plaza: buildBusStop(scene, STOPS.plaza), cinema: buildBusStop(scene, STOPS.cinema) };
+  const stopBus = makeBus();                       // 정류장에 서는 버스 (한 번에 한 대)
+  stopBus.group.visible = false; scene.add(stopBus.group);
   const ride = buildRide(scene);
   const cinema = buildCinema(scene);
   seats.push(...ride.seats, ...cinema.seats);
@@ -845,7 +871,8 @@ export async function startGame(o) {
     net: null, netTried: false, netFailed: false, otherSeen: 0, otherOnline: false,
     remote: null, flash: null, flashUntil: 0, moved: false,
     sendAcc: 0, idleAcc: 0, lastSent: '',
-    zone: 0, bus: { phase: 'idle', t: 0 }, snapCam: false,
+    zone: 0, zoneStop: 'plaza', bus: { phase: 'idle', t: 0, stop: 'plaza', to: 'cinema' }, snapCam: false,
+    ac: 0,                                         // 마지막으로 장소를 옮긴 시각 (늦게 들어온 쪽이 먼저 간 쪽을 따라간다)
   };
 
   // 입력
@@ -991,23 +1018,26 @@ export async function startGame(o) {
     if (m.k === 'c' && typeof m.c === 'string') {
       unseal(m.c).then(t => showChat(m.r, t)).catch(() => { /* 열쇠가 다르면 무시 */ });
     } else if (m.k === 'p') {
-      st.remote = { x: m.x, z: m.z, ry: m.ry, m: !!m.m, sit: Number.isInteger(m.sit) ? m.sit : -1 };
-      const theirArea = areaOf(m.x);           // 상대가 이미 버스나 영화관에 있으면 따라간다 (늦게 들어온 경우)
-      if (theirArea !== 'plaza' && st.bus.phase === 'idle' && areaOf(chars[st.role].pos.x) === 'plaza') joinArea(theirArea);
+      st.remote = { x: m.x, z: m.z, ry: m.ry, m: !!m.m, sit: Number.isInteger(m.sit) ? m.sit : -1, bd: !!m.bd };
+      // 상대가 나보다 나중에 다른 장소로 옮겨 갔으면 따라간다 (늦게 들어왔거나 잠깐 끊긴 경우)
+      const meC = chars[st.role], settled = ['idle', 'leave', 'wait', 'arrive', 'door'].includes(st.bus.phase);
+      if (areaOf(m.x) !== areaOf(meC.pos.x) && settled && !meC.path && Number(m.ac) > st.ac) joinArea(m);
       if (m.r === 'beomjun' && m.g === 'robi' && st.holder === 'beomjun') receiveGive();
       if (m.r === 'robi' && m.o && !st.opened) playOpen(false);
     } else if (m.k === 'e') {
       if (m.t === 'give' && st.holder === 'beomjun') receiveGive();
       if (m.t === 'open' && !st.opened) playOpen(false);
       if (m.t === 'hug' || m.t === 'kiss') startEmote(m, false);
-      if (m.t === 'bus') startBus(false);
+      if (m.t === 'bus') startBus(false, STOPS[m.s] ? m.s : 'plaza');
+      if (m.t === 'go') depart(false, m.s);
       if (m.t === 'mv') syncMovie(m);
     }
   }
   function sendState(force) {
     if (st.mode !== 'online' || !st.net || !st.net.connected) return;
     const me = chars[st.role];
-    const msg = { r: st.role, x: +me.pos.x.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), m: me.moving ? 1 : 0, sit: me.seat };
+    const msg = { r: st.role, x: +me.pos.x.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), m: me.moving ? 1 : 0, sit: me.seat, bd: me.boarded ? 1 : 0, ac: st.ac };
+    if (areaOf(me.pos.x) === 'bus') { msg.to = st.bus.to; msg.rt = Math.floor(st.bus.t); }
     if (st.role === 'beomjun') msg.g = st.holder;
     if (st.role === 'robi') msg.o = st.opened ? 1 : 0;
     const sig = JSON.stringify(msg);
@@ -1052,7 +1082,10 @@ export async function startGame(o) {
   const constrain = (x, z) => {
     const area = areaOf(x);
     if (area === 'bus') return [clamp(x, AREA.bus.x - 3.0, AREA.bus.x + 3.9), clamp(z, AREA.bus.z - 0.75, AREA.bus.z + 0.75)];
-    if (area === 'cinema') return [clamp(x, AREA.cinema.x - 6.0, AREA.cinema.x + 6.0), clamp(z, AREA.cinema.z - 4.2, AREA.cinema.z + 6.2)];
+    if (area === 'cinema') {
+      const O = AREA.cinema, zz = clamp(z, O.z - 4.2, O.z + 9.8), w = zz > O.z + 7.9 ? 13.5 : 6.0;
+      return [clamp(x, O.x - w, O.x + w), zz];
+    }
     const r = Math.hypot(x, z);
     if (r > PLAZA_R - 0.5) { x *= (PLAZA_R - 0.5) / r; z *= (PLAZA_R - 0.5) / r; }
     const fx = x - FOUNTAIN.x, fz = z - FOUNTAIN.z, fd = Math.hypot(fx, fz) || 1, need = FOUNTAIN.r + 0.45;
@@ -1095,6 +1128,7 @@ export async function startGame(o) {
   function startEmote(m, mine) {
     const E = m && EMOTE[m.t];
     if (st.emote || !E) return;
+    if (Object.values(chars).some(c => c.boarded || c.path)) return;   // 버스를 타고 내리는 중엔 안 한다
     const L = layoutEmote(m);
     if (!L) return;
     for (const c of Object.values(chars)) c.seat = -1;   // 앉아 있었다면 일어나서 한다
@@ -1112,106 +1146,236 @@ export async function startGame(o) {
     else if (act === 'open' && o.onWantOpen) o.onWantOpen();
   });
 
-  // 버스: 정류장 칸에 15초 → 버스 도착 → 문 열림 → 타기 → (1분) → 영화관
-  const fadeEl = q('#game-fade');
+  // 버스: 정류장 칸에 15초 → 버스 도착 → 문 열림 → 각자 걸어가서 타기
+  //       (둘 다 접속해 있으면 둘 다 타야 출발, 혼자면 혼자 타도 출발) → 1분 → 반대편 정류장에서 내리기
+  const fadeEl = q('#game-fade'), boardBtn = q('#game-board');
   const fade = on => fadeEl.classList.toggle('on', on);
-  const nextPhase = phase => { st.bus = { phase, t: 0 }; };
-  function startBus(mine) {
-    if (st.bus.phase !== 'idle') return;
-    nextPhase('arrive');
-    st.zone = 1; stop.setProgress(1);
-    plazaBus.group.visible = true;
-    plazaBus.door.position.x = BUS.door;
-    flash('🚌 버스가 와요!', 4000);
-    if (mine && st.mode === 'online' && st.net) st.net.send('e', { r: st.role, t: 'bus' });
-  }
-  function teleport(area) {
-    const O = AREA[area];
-    const spots = area === 'bus'
-      ? { beomjun: [O.x - 0.6, O.z + 0.3, 0.5], robi: [O.x + 0.6, O.z - 0.25, -0.4] }
-      : { beomjun: [O.x + 0.7, O.z + 5.6, Math.PI], robi: [O.x - 0.7, O.z + 5.6, Math.PI] };
-    for (const [role, c] of Object.entries(chars)) {
-      const [x, z, ry] = spots[role];
-      c.pos.x = x; c.pos.z = z; c.ry = ry; c.group.rotation.y = ry; c.seat = -1; c.moving = false;
+  const BUS_SIGN = { cinema: '영화관  CINEMA', plaza: '광장  PLAZA' };
+  const PLACE = { cinema: '영화관', plaza: '광장' };
+  const nextPhase = (phase, extra) => { st.bus = { ...st.bus, ...extra, phase, t: 0 }; };
+  const roleOf = c => (c === chars.beomjun ? 'beomjun' : 'robi');
+  const busX = S => S.x - BUS.door;                          // 정류장에 선 버스의 가운데 (문이 정류장 칸 가운데)
+  const outZ = S => S.roadZ - BUS.W / 2 - 0.35;              // 문 앞 (땅)
+  const inZ = S => S.roadZ - BUS.W / 2 + 0.45;               // 문 안쪽 (버스 바닥)
+  const spotIn = (S, role) => (role === 'beomjun' ? [busX(S) - 3.1, S.roadZ - 0.05] : [busX(S) - 2.35, S.roadZ + 0.1]);
+  const nearDoor = (S, c, r) => areaOf(c.pos.x) === S.area && Math.hypot(c.pos.x - S.x, c.pos.z - outZ(S)) < r;
+  const inBus = c => {                                        // 정류장 버스 바닥 위에 서 있나
+    const S = STOPS[st.bus.stop];
+    return stopBus.group.visible && st.bus.phase !== 'idle' && areaOf(c.pos.x) === S.area
+      && Math.abs(c.pos.x - busX(S)) < BUS.L / 2 && Math.abs(c.pos.z - S.roadZ) < BUS.W / 2 - 0.05;
+  };
+  const resetStops = () => { st.zone = 0; for (const s of Object.values(stops)) s.setProgress(0); };
+  // 함께 움직이는 사람: 한 폰이면 둘 다, 각자 폰이면 나 + 접속해 있는 상대
+  const travelers = () => (st.mode === 'local' ? [chars.beomjun, chars.robi]
+    : [chars[st.role], ...(st.otherOnline ? [chars[other[st.role]]] : [])]);
+
+  function walkTo(c, pts, done, endRy) { c.seat = -1; c.path = pts; c.onArrive = done || null; c.endRy = endRy; }
+  function followPath(c, dt) {
+    const p = c.path[0], dx = p[0] - c.pos.x, dz = p[1] - c.pos.z, d = Math.hypot(dx, dz);
+    const step = Math.min(d, SPEED * 0.85 * dt);
+    if (d > 0.001) { c.pos.x += (dx / d) * step; c.pos.z += (dz / d) * step; c.ry = Math.atan2(dx, dz); }
+    c.moving = true;
+    if (d - step < 0.01) {
+      c.path.shift();
+      if (!c.path.length) {
+        c.path = null; c.moving = false;
+        if (c.endRy !== undefined) c.ry = c.endRy;
+        const f = c.onArrive; c.onArrive = null;
+        if (f) f();
+      }
     }
-    st.emote = null; st.remote = null; st.snapCam = true;
-    world.recenter(O.x, O.z);
+  }
+  // 문은 넓어서 둘이 나란히 (Beomjun 왼쪽 줄, Robi 오른쪽 줄) 타고 내린다
+  const lane = c => (c === chars.beomjun ? -0.25 : 0.25);
+  function boardBus(c) {
+    const S = STOPS[st.bus.stop];
+    if (c.boarded || c.path || st.bus.phase !== 'wait' || areaOf(c.pos.x) !== S.area) return;
+    const [sx, sz] = spotIn(S, roleOf(c)), lx = S.x + lane(c);
+    walkTo(c, [[lx, outZ(S)], [lx, inZ(S)], [sx, sz]], () => { c.boarded = true; sendState(true); }, 0);
+  }
+  function leaveBus(c) {                           // 내려서 정류장 칸 왼쪽 옆에 선다 (칸을 밟으면 버스를 또 부르니까)
+    const S = STOPS[st.bus.stop], lx = S.x + lane(c);
+    const end = c === chars.beomjun ? [S.x - 2.0, outZ(S) - 1.3] : [S.x - 2.8, outZ(S) - 1.55];
+    c.boarded = false;
+    walkTo(c, [[lx, inZ(S)], [lx, outZ(S)], end], null, 0);
     sendState(true);
   }
-  function joinArea(area) {                       // 상대가 먼저 가 있는 곳으로 바로 합류
-    teleport(area);
-    stop.setProgress(0); st.zone = 0;
-    nextPhase(area === 'bus' ? 'ride' : 'cinema');
+  function place(c, x, z, ry, y = 0) {
+    c.pos.x = x; c.pos.z = z; c.ry = ry; c.group.rotation.y = ry;
+    c.seat = -1; c.moving = false; c.path = null; c.onArrive = null; c.boarded = false; c.baseY = y;
+  }
+  function arrived(area) {                         // 장소를 옮긴 뒤 공통 정리
+    const O = AREA[area] || { x: 0, z: 0 };
+    st.emote = null; st.remote = null; st.snapCam = true; st.ac = Date.now();
+    world.recenter(O.x, O.z + (area === 'cinema' ? 8 : 0));
+    sendState(true);
+  }
+
+  function startBus(own, key) {
+    const S = STOPS[key];
+    if (!S || !['idle', 'leave'].includes(st.bus.phase)) return;
+    nextPhase('arrive', { stop: key, to: S.to });
+    resetStops(); stops[key].setProgress(1);
+    stopBus.setSign(BUS_SIGN[S.to]);
+    stopBus.group.visible = true;
+    stopBus.group.position.set(busX(S) + 34, 0, S.roadZ);
+    stopBus.door.position.x = BUS.door;
+    flash('🚌 버스가 와요!', 4000);
+    if (own && st.mode === 'online' && st.net) st.net.send('e', { r: st.role, t: 'bus', s: key });
+  }
+  // 모두 탔으면 출발. 상대 폰이 먼저 출발했으면(own=false) 아직 안 탄 내 캐릭터도 바로 태운다
+  function depart(own, key) {
+    const b = st.bus;
+    if (key && key !== b.stop) return;
+    if (!(b.phase === 'wait' || (!own && (b.phase === 'arrive' || b.phase === 'door')))) return;
+    const S = STOPS[b.stop];
+    stopBus.group.position.set(busX(S), 0, S.roadZ);
+    for (const c of mine()) {
+      if (areaOf(c.pos.x) !== S.area || (c.boarded && !c.path)) continue;
+      const [sx, sz] = spotIn(S, roleOf(c));
+      place(c, sx, sz, 0, BUS.floorY); c.boarded = true;
+    }
+    nextPhase('close');
+    flash(`${PLACE[S.to]}으로 출발! 🚌`, 3000);
+    if (own && st.mode === 'online' && st.net) { st.net.send('e', { r: st.role, t: 'go', s: b.stop }); sendState(true); }
+  }
+  function enterRide() {                           // 달리는 버스 안으로
+    const O = AREA.bus, spots = { beomjun: [O.x - 0.6, O.z + 0.3, 0.5], robi: [O.x + 0.6, O.z - 0.25, -0.4] };
+    for (const c of travelers()) { const [x, z, ry] = spots[roleOf(c)]; place(c, x, z, ry); }
+    ride.setSign(BUS_SIGN[st.bus.to]);
+    stopBus.group.visible = false;
+    resetStops();
+    arrived('bus');
+  }
+  function arriveAt(key) {                         // 반대편 정류장: 버스 안에서 문으로 걸어 내린다
+    const S = STOPS[key];
+    nextPhase('drop', { stop: key });
+    stopBus.setSign(BUS_SIGN[key]);
+    stopBus.group.visible = true;
+    stopBus.group.position.set(busX(S), 0, S.roadZ);
+    stopBus.door.position.x = BUS.door + 1.3;
+    for (const c of travelers()) { const [x, z] = spotIn(S, roleOf(c)); place(c, x, z, 0, BUS.floorY); c.boarded = true; }
+    for (const c of mine()) leaveBus(c);
+    arrived(S.area);
+    flash(key === 'cinema' ? '🎬 영화관에 도착했어! 안으로 들어가 볼까?' : '⛲ 광장으로 돌아왔어!', 3500);
+    if (key === 'cinema') loadMovie();
+  }
+  function joinArea(m) {                           // 상대가 먼저 가 있는 곳으로 바로 합류
+    const area = areaOf(m.x), me = chars[st.role];
+    stopBus.group.visible = false; resetStops();
+    if (area === 'bus') {
+      const to = STOPS[m.to] ? m.to : 'cinema';
+      st.bus = { phase: 'ride', t: clamp(Number(m.rt) || 0, 0, RIDE_SEC - 3), stop: STOPS[to].to, to };
+      const O = AREA.bus;
+      place(me, O.x + (st.role === 'beomjun' ? -0.6 : 0.6), O.z, 0);
+      ride.setSign(BUS_SIGN[to]);
+      arrived('bus');
+      return;
+    }
+    st.bus = { phase: 'idle', t: 0, stop: area, to: STOPS[area].to };
+    const [x, z] = m.bd ? [STOPS[area].x - 2.4, outZ(STOPS[area]) - 1.4] : constrain(m.x + 0.9, m.z);
+    place(me, x, z, 0);
+    arrived(area);
     if (area === 'cinema') loadMovie();
   }
-  // 반환값 true = 조이스틱을 잠깐 멈춘다 (타러 걸어가는 중, 화면 전환 중)
+
+  // 반환값 true = 조이스틱을 잠깐 멈춘다 (문 닫히는 중, 화면 전환 중, 내리는 중)
   function updateBus(dt) {
-    const b = st.bus;
+    const b = st.bus, S = STOPS[b.stop];
     b.t += dt;
-    const stopX = STOP.x - BUS.door;
+    const B = chars.beomjun, R = chars.robi, me = chars[st.role], them = chars[other[st.role]];
     if (b.phase === 'idle') {
-      const inZone = c => areaOf(c.pos.x) === 'plaza' && Math.abs(c.pos.x - STOP.x) < STOP.w / 2 && Math.abs(c.pos.z - STOP.z) < STOP.d / 2;
-      const here = st.mode === 'local' ? [chars.beomjun, chars.robi] : [chars[st.role], ...(st.otherOnline ? [chars[other[st.role]]] : [])];
+      const myS = STOPS[areaOf((st.mode === 'local' ? B : me).pos.x)];
+      if (!myS) return false;
+      if (st.zoneStop !== myS.key) { resetStops(); st.zoneStop = myS.key; }
+      const inZone = c => areaOf(c.pos.x) === myS.area && Math.abs(c.pos.x - myS.x) < STOP_SIZE.w / 2 && Math.abs(c.pos.z - myS.z) < STOP_SIZE.d / 2;
+      const here = st.mode === 'local' ? [B, R] : [me, ...(st.otherOnline ? [them] : [])];
       const any = here.some(inZone);
-      st.zone = any ? Math.min(1, st.zone + dt / STOP.wait) : Math.max(0, st.zone - dt * 0.5);
-      stop.setProgress(st.zone);
-      if (any && !st.emote) flash(`🚌 버스 기다리는 중… ${Math.max(1, Math.ceil(STOP.wait * (1 - st.zone)))}초`, 300);
-      if (st.zone >= 1) startBus(true);
+      st.zone = any ? Math.min(1, st.zone + dt / STOP_SIZE.wait) : Math.max(0, st.zone - dt * 0.5);
+      stops[myS.key].setProgress(st.zone);
+      if (any && !st.emote) flash(`🚌 버스 기다리는 중… ${Math.max(1, Math.ceil(STOP_SIZE.wait * (1 - st.zone)))}초`, 300);
+      if (st.zone >= 1) startBus(true, myS.key);
       return false;
     }
     if (b.phase === 'arrive') {                   // 오른쪽에서 들어와 정류장 앞에 선다
-      const k = Math.min(1, b.t / 5.5), x = stopX + 34 * (1 - k) ** 3;
-      spinWheels(plazaBus, Math.abs(plazaBus.group.position.x - x));
-      plazaBus.group.position.set(x, 0, ROAD_Z);
+      const k = Math.min(1, b.t / 5.5), x = busX(S) + 34 * (1 - k) ** 3;
+      spinWheels(stopBus, Math.abs(stopBus.group.position.x - x));
+      stopBus.group.position.set(x, 0, S.roadZ);
       if (k >= 1) nextPhase('door');
       return false;
     }
     if (b.phase === 'door') {
-      plazaBus.door.position.x = BUS.door + 1.3 * Math.min(1, b.t / 0.7);
-      if (b.t >= 0.7) { nextPhase('board'); flash('타자! 🚌', 2500); }
+      stopBus.door.position.x = BUS.door + 1.3 * Math.min(1, b.t / 0.7);
+      if (b.t >= 0.7) { nextPhase('wait'); flash('🚌 문이 열렸어! 문 앞으로 걸어가면 타요', 3000); }
       return false;
     }
-    if (b.phase === 'board') {                    // 문으로 걸어간다
-      const tz = ROAD_Z - BUS.W / 2 - 0.25;
-      for (const c of mine()) {
-        if (areaOf(c.pos.x) !== 'plaza') continue;
-        c.seat = -1;
-        const tx = STOP.x + (c === chars.beomjun ? 0.3 : -0.3), dx = tx - c.pos.x, dz = tz - c.pos.z, d = Math.hypot(dx, dz);
-        const step = Math.min(d, SPEED * dt);
-        if (d > 0.001) { c.pos.x += (dx / d) * step; c.pos.z += (dz / d) * step; c.ry = Math.atan2(dx, dz); }
-        c.moving = d > 0.05;
+    if (b.phase === 'wait') {                     // 문 열고 기다린다
+      const need = st.mode === 'local' ? [B, R].filter(c => areaOf(c.pos.x) === S.area)
+        : [me, ...(st.otherOnline && areaOf(them.pos.x) === S.area ? [them] : [])];
+      if (b.t > 0.3 && need.length && need.every(c => c.boarded && !c.path)) { depart(true); return true; }
+      const meC = st.mode === 'local' ? B : me;
+      if (!st.emote && (nearDoor(S, meC, 9) || meC.boarded)) {
+        let hint = '🚌 문 앞으로 걸어가면 타요';
+        if (st.mode === 'local') {
+          const on = [B, R].filter(c => c.boarded), off = [B, R].find(c => !c.boarded);
+          if (on.length === 1 && off) hint = `🚌 ${names[roleOf(off)]}도 타야 출발해요`;
+        } else if (need.length > 1) {
+          const oName = names[other[st.role]];
+          if (me.boarded && !them.boarded) hint = `🚌 ${oName} 기다리는 중… 둘 다 타야 출발해요`;
+          else if (!me.boarded && them.boarded) hint = `🚌 ${ga(oName)} 버스에 탔어! 문 앞으로 가서 타자`;
+        }
+        flash(hint, 300);
       }
-      if (b.t >= 2.4) { fade(true); nextPhase('fadeout'); }
+      return false;
+    }
+    if (b.phase === 'close') {
+      stopBus.door.position.x = BUS.door + 1.3 * (1 - Math.min(1, b.t / 0.6));
+      if (b.t >= 1.0) { fade(true); nextPhase('fadeout'); }
       return true;
     }
     if (b.phase === 'fadeout') {
       if (b.t >= 0.75) {
-        teleport('bus');
-        plazaBus.group.visible = false;
-        st.zone = 0; stop.setProgress(0);
+        enterRide();
         nextPhase('ride');
         setTimeout(() => fade(false), 150);
-        flash('영화관으로 출발! 🎬', 3000);
       }
       return true;
     }
     if (b.phase === 'ride') {
-      if (b.t > 3 && !st.emote) flash(`🚌 영화관으로 가는 중… ${Math.max(1, Math.ceil(RIDE_SEC - b.t))}초`, 300);
+      if (b.t > 3 && !st.emote) flash(`🚌 ${PLACE[b.to]}으로 가는 중… ${Math.max(1, Math.ceil(RIDE_SEC - b.t))}초`, 300);
       if (b.t >= RIDE_SEC) { fade(true); nextPhase('fade2'); }
       return false;
     }
     if (b.phase === 'fade2') {
       if (b.t >= 0.75) {
-        teleport('cinema');
-        nextPhase('cinema');
+        arriveAt(b.to);
         setTimeout(() => fade(false), 150);
-        flash('🎬 영화관에 도착했어!', 3500);
-        loadMovie();
       }
       return true;
     }
+    if (b.phase === 'drop') {                     // 다 내리면 문 닫고 떠난다
+      const busy = mine().some(c => c.path);
+      if (!busy && b.t > 0.6) nextPhase('leave');
+      return busy;
+    }
+    if (b.phase === 'leave') {
+      stopBus.door.position.x = BUS.door + 1.3 * (1 - Math.min(1, b.t / 0.6));
+      const k = Math.max(0, b.t - 0.9), x = busX(S) - 2.6 * k * k;
+      spinWheels(stopBus, Math.abs(stopBus.group.position.x - x));
+      stopBus.group.position.x = x;
+      if (k > 4.2) { stopBus.group.visible = false; nextPhase('idle'); }
+      return false;
+    }
     return false;
   }
+  boardBtn.addEventListener('click', () => {
+    if (boardBtn.dataset.act === 'board') {
+      const S = STOPS[st.bus.stop];
+      for (const c of mine()) if (nearDoor(S, c, 7)) boardBus(c);
+    } else if (boardBtn.dataset.act === 'off') {
+      for (const c of mine()) if (c.boarded && !c.path) leaveBus(c);
+    }
+  });
 
   // 영화관 스크린: 영상이 있으면 '상영 시작'으로 틀고, 각자 폰이면 두 화면이 같이 튼다
   const movieBtn = q('#game-movie');
@@ -1257,11 +1421,20 @@ export async function startGame(o) {
     c.ry = d > 0.3 ? Math.atan2(dx, dz) : s.ry;
   }
   function drive(c, v, dt, otherC) {          // 앉아 있을 때 조이스틱을 움직이면 일어난다
+    if (c.path) return;                         // 버스에 타고 내리는 길은 followPath 가 걷는다
+    const push = Math.hypot(v.x, v.y);
+    if (c.boarded) {                            // 정류장 버스 안: 버스 반대쪽으로 움직이면 내린다
+      c.moving = false;
+      if (push > 0.35 && v.y < 0.3 && st.bus.phase === 'wait') leaveBus(c);
+      return;
+    }
     if (c.seat >= 0) {
-      if (Math.hypot(v.x, v.y) > 0.35) c.seat = -1;
+      if (push > 0.35) c.seat = -1;
       else { goSeat(c, dt); return; }
     }
     move(c, v, dt, otherC);
+    // 버스가 문을 열고 기다릴 때 문 앞에서 버스 쪽(화면 아래)으로 걸으면 탄다
+    if (st.bus.phase === 'wait' && v.y > 0.5 && nearDoor(STOPS[st.bus.stop], c, 2.2)) boardBus(c);
   }
   const sitBtn = q('#game-sit'), sitLbl = q('#game-sit-label');
   const mine = () => (st.mode === 'local' ? [chars.beomjun, chars.robi] : [chars[st.role]]);
@@ -1280,13 +1453,19 @@ export async function startGame(o) {
     c.moving = len > 0.15;
     if (!c.moving) return;
     const k = Math.min(1, len);
-    const dx = (v.x / len) * k, dz = (v.y / len) * k;
+    const dx = (v.x / len) * k, dz = (v.y / len) * k, pz = c.pos.z;
     c.pos.x += dx * SPEED * dt; c.pos.z += dz * SPEED * dt;
     const area = areaOf(c.pos.x);
     if (area === 'bus') {                       // 버스 안
       c.pos.x = clamp(c.pos.x, AREA.bus.x - 3.6, AREA.bus.x + 4.2); c.pos.z = clamp(c.pos.z, AREA.bus.z - 1.0, AREA.bus.z + 1.0);
-    } else if (area === 'cinema') {             // 영화관 안
-      c.pos.x = clamp(c.pos.x, AREA.cinema.x - 6.6, AREA.cinema.x + 6.6); c.pos.z = clamp(c.pos.z, AREA.cinema.z - 4.6, AREA.cinema.z + 6.6);
+    } else if (area === 'cinema') {             // 영화관 안 → 뒤쪽 출입구 → 밖 인도 (연석 앞까지)
+      const O = AREA.cinema, wasOut = pz - O.z > 7.35;
+      c.pos.z = clamp(c.pos.z, O.z - 4.6, O.z + 10.1);
+      if (!wasOut) c.pos.x = clamp(c.pos.x, O.x - 6.6, O.x + 6.6);
+      else {
+        c.pos.x = clamp(c.pos.x, O.x - 14, O.x + 14);
+        if (Math.abs(c.pos.x - O.x) > 6.6) c.pos.z = Math.max(c.pos.z, O.z + 7.6);   // 벽 바깥 모서리
+      }
     } else {
       const r = Math.hypot(c.pos.x, c.pos.z);
       if (r > PLAZA_R) { c.pos.x *= PLAZA_R / r; c.pos.z *= PLAZA_R / r; }
@@ -1363,6 +1542,7 @@ export async function startGame(o) {
 
     const busLock = updateBus(dt);
     ride.update(dt);
+    for (const c of mine()) if (c.path) followPath(c, dt);
 
     if (st.mode === 'local') {
       const vb = joyL.v.x || joyL.v.y ? joyL.v : keyVec('w', 's', 'a', 'd');
@@ -1378,6 +1558,7 @@ export async function startGame(o) {
       if (st.otherOnline && !was && !em) flash(`${names[other[st.role]]} 들어왔어!`);
       if (st.otherOnline !== was) updateLabels();
       if (st.remote && !em) {
+        them.boarded = st.remote.bd;
         them.seat = st.remote.sit >= 0 && seats[st.remote.sit] ? st.remote.sit : -1;
         if (them.seat >= 0 && them.seat === me.seat && st.role === 'beomjun') me.seat ^= 1; // 같은 자리면 Beomjun이 옆자리로
         if (them.seat >= 0) goSeat(them, dt);
@@ -1425,6 +1606,7 @@ export async function startGame(o) {
     const part = role => (!st.emote ? null : st.emote.type === 'hug' ? 'hug' : st.emote.who === role ? 'kisser' : 'recv');
     gift.group.visible = !st.emote;                    // 안는 동안 선물은 잠깐 숨긴다
     B.label.sprite.visible = R.label.sprite.visible = !st.emote;
+    for (const c of [B, R]) c.baseY += ((inBus(c) ? BUS.floorY : 0) - c.baseY) * Math.min(1, dt * 14);   // 버스 계단을 오르내린다
     animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer && !emo, emo && { ...emo, part: part('beomjun') }, 1);
     animateChar(R, dt, time, st.holder === 'robi' && !st.transfer && !emo, emo && { ...emo, part: part('robi') }, -1);
     for (const c of [B, R]) {
@@ -1454,28 +1636,38 @@ export async function startGame(o) {
     } else if (st.opened && !st.opening && iAmR) {
       act = 'open'; label = '쿠폰 보기';
     }
+    const onBus = [B, R].some(c => c.boarded || c.path);
     if (st.emote || busLock) { act = ''; label = ''; }
-    const canTouch = dist < 2.3 && !st.emote && !busLock && !st.transfer && (st.mode === 'local' || st.otherOnline);
+    const canTouch = dist < 2.3 && !st.emote && !busLock && !onBus && !st.transfer && (st.mode === 'local' || st.otherOnline);
     let sitAct = '';
-    if (!st.emote && !busLock) {
+    if (!st.emote && !busLock && !mine().some(c => c.boarded || c.path)) {
       if (mine().some(c => c.seat < 0 && freeSeatNear(c) >= 0)) sitAct = 'sit';
       else if (mine().some(c => c.seat >= 0)) sitAct = 'stand';
     }
-    const myArea = areaOf((st.mode === 'local' ? B : chars[st.role]).pos.x);
-    const movieAct = myArea === 'cinema' && movie && !busLock ? (movie.paused ? '▶ 상영 시작' : '❚❚ 잠깐 멈춤') : '';
-    const sig = act + label + (canTouch ? '+touch' : '') + sitAct + movieAct;
+    const myC = st.mode === 'local' ? B : chars[st.role];
+    const inTheater = areaOf(myC.pos.x) === 'cinema' && myC.pos.z < AREA.cinema.z + 7.3;
+    const movieAct = inTheater && movie && !busLock ? (movie.paused ? '▶ 상영 시작' : '❚❚ 잠깐 멈춤') : '';
+    let boardAct = '';
+    if (st.bus.phase === 'wait' && !st.emote) {
+      const S = STOPS[st.bus.stop], mc = mine().filter(c => areaOf(c.pos.x) === S.area);
+      if (mc.some(c => !c.boarded && !c.path && nearDoor(S, c, 7))) boardAct = 'board';
+      else if (mc.length && mc.every(c => c.boarded && !c.path)) boardAct = 'off';
+    }
+    const sig = act + label + (canTouch ? '+touch' : '') + sitAct + movieAct + boardAct;
     if (sig !== shownAction) {
       shownAction = sig;
       actionBtn.hidden = !act; actionBtn.dataset.act = act; actionBtn.textContent = label;
       hugBtn.hidden = !canTouch; kissBtn.hidden = !canTouch;
       sitBtn.hidden = !sitAct; sitBtn.dataset.act = sitAct; sitLbl.textContent = sitAct === 'stand' ? '일어나기' : '앉기';
       movieBtn.hidden = !movieAct; movieBtn.textContent = movieAct;
+      boardBtn.hidden = !boardAct; boardBtn.dataset.act = boardAct;
+      boardBtn.textContent = boardAct === 'board' ? '🚌 버스 타기' : '내리기';
     }
 
     renderStatus(now);
     updateCamera(dt, st.snapCam);
     st.snapCam = false;
-    world.setSnow(areaOf(camT.x) !== 'cinema');      // 영화관 안에는 눈이 안 온다
+    world.setSnow(areaOf(camT.x) !== 'cinema' || camT.z > AREA.cinema.z + 7.2);   // 영화관 안에는 눈이 안 온다
     world.update(dt, camT.x, camT.z);
     renderer.render(scene, camera);
     if (!readySent) { readySent = true; if (o.onReady) o.onReady(); }
