@@ -373,10 +373,8 @@
       if (state.gate.question) $('#gate-q').textContent = state.gate.question;
       fetchBytes('data/content.bin').then(b => { state.contentBuf = b; }, noop);
       // 배경 음악을 날짜를 입력하는 동안 미리 받아 둔다 → 입장하자마자 바로 나온다
-      // (작은 사본은 음량을 못 바꾸는 아이폰에서만 쓴다)
-      const volOK = (() => { try { const a = document.createElement('audio'); a.volume = .5; return a.volume === .5; } catch { return false; } })();
-      (state.gate.warm || []).forEach((src, i) => {
-        if (typeof src !== 'string' || (i > 0 && volOK)) return;
+      (state.gate.warm || []).forEach(src => {
+        if (typeof src !== 'string') return;
         const p = fetchBytes(src); p.catch(noop);
         state.warm.set(src, p);
       });
@@ -559,7 +557,6 @@
       }).catch(e => console.warn(e));
     }
     const musicReady = c.music ? mediaURL(c.music).then(setupMusic).catch(e => console.warn(e)) : Promise.resolve();
-    if (c.musicQuiet && !canSetVolume) mediaURL(c.musicQuiet).then(setupQuietMusic).catch(e => console.warn(e));
     if (!c.music && audio.src) { audio.pause(); audio.removeAttribute('src'); }
     if (m.video) Promise.race([musicReady, new Promise(r => setTimeout(r, 4000))]).then(() => loadVideo(m.video));
     if (m.realPhoto) mediaURL(m.realPhoto).then(u => { $('#real-img').src = u; state.hasReal = true; }).catch(e => console.warn(e));
@@ -742,19 +739,13 @@
 
   /* ---------- 배경 음악 ----------
    * 파일 자체를 은은한 크기(약 -22 LUFS)로 만들어 두고 끝없이 반복한다. 게임 안에서도 계속 나온다.
-   * 재현 영상이 나오면 디졸브로 꺼지고, 영화관 스크린 영상이 나오면 디졸브로 아주 작게(0.2) 깔린다.
-   * 영상이 멈추거나 끝나면 다시 디졸브로 원래 크기로 돌아온다.
+   * 영상(재현 영상, 영화관 스크린 영상)이 나오면 디졸브로 꺼지고, 멈추거나 끝나면 디졸브로 다시 켜진다.
    * 아이폰은 audio.volume 을 바꿀 수 없고 Web Audio 는 무음 모드에서 소리가 안 나서,
-   * 그냥 <audio> 로 틀되, 작게 깔 때는 미리 -14dB 로 만든 사본으로 같은 자리에서 갈아탄다. */
-  const DUCK = { meet: 0, screen: 0.2 };
-  const music = { level: 1, ducks: new Map(), timer: 0, blocked: false, quiet: null };
+   * 그냥 <audio> 로 틀고 영상이 나오면 바로 멈췄다가 다시 튼다. */
+  const DUCK = { meet: 0, screen: 0 };
+  const music = { level: 1, ducks: new Map(), timer: 0, blocked: false };
   function primeMusic() {                          // 사용자가 탭한 순간에만 부른다 (아이폰은 이때 깨운 오디오만 나중에 틀 수 있다)
     if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
-    if (!canSetVolume && !music.quiet) {
-      const qa = new Audio();
-      qa.preload = 'auto'; qa.src = silentWav(); qa.play().catch(noop);
-      music.quiet = qa;
-    }
   }
   const canFade = () => canSetVolume;
   function setMusicLevel(v) {
@@ -767,13 +758,17 @@
     for (const v of music.ducks.values()) t = Math.min(t, v);
     return t;
   }
-  const musicPlaying = () => !audio.paused || (music.quiet && music.quiet.ready && !music.quiet.paused);
+  const musicPlaying = () => !audio.paused;
   function syncMusic() {
     if (!state.musicURL) return;
     clearInterval(music.timer);
     const to = musicTarget();
-    if (to === 0 && document.hidden) { audio.pause(); if (music.quiet) music.quiet.pause(); return; }   // 다른 앱으로 가면 바로 멈춤
-    if (!canFade()) { switchMusic(to); return; }
+    if (to === 0 && document.hidden) { audio.pause(); return; }      // 다른 앱으로 가면 바로 멈춤
+    if (!canFade()) {                              // 아이폰: 줄이지 못하니 바로 멈추거나 튼다
+      if (to === 0) audio.pause();
+      else if (audio.paused) audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
+      return;
+    }
     if (to > 0 && audio.paused) {
       setMusicLevel(0);
       audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
@@ -786,14 +781,6 @@
       if (k >= 1) { clearInterval(music.timer); if (to === 0) audio.pause(); }
     }, 40);
   }
-  function switchMusic(to) {                       // 아이폰: 보통 / 작은 사본 중 하나만, 같은 자리에서 이어서
-    const q = music.quiet && music.quiet.ready ? music.quiet : null;
-    if (to === 0) { audio.pause(); if (q) q.pause(); return; }
-    const main = to < 1 && q ? q : audio, other = main === audio ? q : audio;
-    if (!main.paused) { if (other && !other.paused) other.pause(); return; }
-    if (other && !other.paused) { try { main.currentTime = other.currentTime; } catch { /* 아직 못 읽었으면 처음부터 */ } }
-    main.play().then(() => { music.blocked = false; if (other) other.pause(); }, () => { music.blocked = true; });
-  }
   function setupMusic(url) {
     state.musicURL = url;
     audio.src = url;
@@ -803,13 +790,6 @@
     musicBtn.setAttribute('aria-pressed', 'true');
     setMusicLevel(canFade() ? 0 : 1);
     syncMusic();
-  }
-  function setupQuietMusic(url) {                  // 아이폰에서만 받는다
-    if (!music.quiet) { const qa = new Audio(); qa.preload = 'auto'; music.quiet = qa; }
-    music.quiet.pause();
-    music.quiet.src = url;
-    music.quiet.loop = true;
-    music.quiet.ready = true;
   }
   function duckWith(media, name) {                 // 이 영상이 재생되는 동안 음악을 줄이거나 뺀다
     media.addEventListener('play', () => { music.ducks.set(name, DUCK[name] ?? 0); syncMusic(); });
@@ -958,7 +938,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js?v=1121d').catch(noop);
+    import('./game.js?v=1121g').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -1003,7 +983,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js?v=1121d');
+      const { startGame } = await import('./game.js?v=1121g');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,

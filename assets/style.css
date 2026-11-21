@@ -516,6 +516,8 @@ main { position: relative; z-index: 1; }
 /* 장소를 옮길 때 잠깐 어두워지는 화면, 영화관 상영 버튼 */
 .game-fade { position: absolute; inset: 0; z-index: 5; background: #05060d; opacity: 0; pointer-events: none; transition: opacity .7s ease; }
 .game-fade.on { opacity: 1; }
+.game.seated .game-movie { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); opacity: .7; }
+.game.seated .game-help { display: none; }
 .game-movie {
   position: absolute; z-index: 3; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   padding: 12px 22px; border-radius: 999px; cursor: pointer; white-space: nowrap;

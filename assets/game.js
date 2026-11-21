@@ -750,7 +750,14 @@ function buildCinema(scene) {
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
   add(new THREE.BoxGeometry(14.4, 0.1, 13.6), std('#5a1f2b', { roughness: 1 }), 0, -0.05, 0.3);
   const wallM = std('#241521', { roughness: 0.9 });
-  [-7.2, 7.2].forEach(x => add(new THREE.BoxGeometry(0.3, 5, 13.6), wallM, x, 2.5, 0.3));
+  [-7.2, 7.2].forEach(x => add(new THREE.BoxGeometry(0.3, 6.6, 13.6), wallM, x, 3.3, 0.3));
+  // 천장: 아래에서만 보이는 판 (좌석 시점에서 하늘 대신 어두운 천장, 위에서 내려다볼 땐 안 보인다)
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(14.7, 13.6), std('#160c14', { roughness: 1 }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 6.6, 0.3); g.add(ceil);
+  [-4, 0, 4].forEach(x => [-3.5, 0.5, 4.5].forEach(z => {           // 천장의 작은 조명
+    const l = new THREE.Mesh(new THREE.CircleGeometry(0.12, 12), new THREE.MeshBasicMaterial({ color: '#ffd9a0' }));
+    l.rotation.x = Math.PI / 2; l.position.set(x, 6.58, z); g.add(l);
+  }));
   add(new THREE.BoxGeometry(14.4, 6.6, 0.3), std('#1a1018', { roughness: 0.9 }), 0, 3.3, -6.5);
   add(new THREE.BoxGeometry(12, 0.45, 1.5), std('#3a1620'), 0, 0.22, -5.6);
   add(new THREE.BoxGeometry(10.6, 6.0, 0.1), std('#0e0a0e'), 0, 3.4, -6.32);
@@ -834,6 +841,7 @@ export async function startGame(o) {
   const ride = buildRide(scene);
   const cinema = buildCinema(scene);
   seats.push(...ride.seats, ...cinema.seats);
+  const CIN0 = seats.length - cinema.seats.length;   // 여기부터 영화관 좌석
 
   const chars = {
     beomjun: makeChar({ name: names.beomjun, coat: '#22252c', hair: '#1b1716', scarf: '#8f8b86', skin: '#f2d0bc' }),
@@ -1500,14 +1508,52 @@ export async function startGame(o) {
     camT.x += (tx - camT.x) * k; camT.z += (tz - camT.z) * k; camExtra += (extra - camExtra) * k;
     const portrait = camera.aspect < 1;
     const back = (portrait ? 7.4 : 6.4) + camExtra, up = (portrait ? 5.4 : 4.6) + camExtra * (camExtra < 0 ? 0.9 : 0.7);
-    camera.position.set(camT.x, up, camT.z + back);
-    camera.lookAt(camT.x, 0.9, camT.z - 0.6);
+    camPos.set(camT.x, up, camT.z + back);
+    camLook.set(camT.x, 0.9, camT.z - 0.6);
+    // 영화관 좌석에 앉아 있으면: 그 자리 눈높이에서 스크린을 정면으로 (고정). 내 캐릭터는 잠깐 숨긴다
+    const sv = seatView();
+    seatBlend += ((sv ? 1 : 0) - seatBlend) * (snap ? 1 : 1 - Math.exp(-dt * 3.5));
+    let fov = baseFov;
+    if (sv) seatLast = sv;
+    if (seatBlend > 0.001 && seatLast) {
+      const O = AREA.cinema, e = seatBlend * seatBlend * (3 - 2 * seatBlend);
+      const ex = seatLast.x, ey = 1.62, ez = seatLast.z - 0.02;
+      // 스크린 네 모서리가 다 들어오도록 시야를 넓힌다 (옆자리에서 비스듬히 봐도, 세로 폰이어도)
+      const E = tmpC.set(ex, ey, ez), f = tmpD.set(O.x, 3.4, O.z - 6.25).sub(E).normalize();
+      const r = tmpR.crossVectors(f, UP).normalize(), u = tmpU.crossVectors(r, f);
+      let th = 0, tv = 0;
+      for (const [sx, sy] of [[-5, -2.82], [5, -2.82], [-5, 2.82], [5, 2.82]]) {
+        const v = tmpV.set(O.x + sx - ex, 3.4 + sy - ey, O.z - 6.25 - ez), zc = v.dot(f);
+        th = Math.max(th, Math.abs(v.dot(r) / zc)); tv = Math.max(tv, Math.abs(v.dot(u) / zc));
+      }
+      const need = THREE.MathUtils.radToDeg(2 * Math.atan(Math.max(tv, th / camera.aspect) * 1.06));
+      const seatFov = clamp(need, Math.min(baseFov, need), 120);
+      camPos.lerp(tmpC.set(ex, ey, ez), e);
+      camLook.lerp(tmpD.set(O.x, 3.4, O.z - 6.25), e);   // tmpC·tmpD 는 위 계산 뒤에 다시 채운다
+      fov = baseFov + (seatFov - baseFov) * e;
+    } else seatLast = null;
+    for (const c of Object.values(chars)) c.group.visible = !(seatBlend > 0.35 && seatLast && seatLast.hide.includes(c));
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.position.copy(camPos);
+    camera.lookAt(camLook);
+  }
+  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), tmpC = new THREE.Vector3(), tmpD = new THREE.Vector3();
+  const tmpR = new THREE.Vector3(), tmpU = new THREE.Vector3(), tmpV = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  let seatBlend = 0, seatLast = null, baseFov = 58;
+  function seatView() {                            // 영화관 좌석에 다 앉은 내 캐릭터들 (한 폰이면 둘 다)
+    if (st.emote) return null;
+    const cs = mine().filter(c => c.seat >= CIN0 && seats[c.seat] && c.sitW > 0.6);
+    if (!cs.length) return null;
+    let x = 0, z = 0;
+    for (const c of cs) { x += seats[c.seat].x; z += seats[c.seat].z; }
+    return { x: x / cs.length, z: z / cs.length, hide: cs };
   }
   function resize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.fov = camera.aspect < 1 ? 58 : 46;
+    baseFov = camera.aspect < 1 ? 58 : 46;
+    camera.fov = baseFov;
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);
@@ -1608,7 +1654,7 @@ export async function startGame(o) {
 
     const emo = st.emote ? { type: st.emote.type, w: st.emote.w } : null;
     const part = role => (!st.emote ? null : st.emote.type === 'hug' ? 'hug' : st.emote.who === role ? 'kisser' : 'recv');
-    gift.group.visible = !st.emote;                    // 안는 동안 선물은 잠깐 숨긴다
+    gift.group.visible = !st.emote && chars[st.holder].group.visible;   // 안는 동안 · 좌석 시점에서 숨긴 손에 있을 땐 숨긴다
     B.label.sprite.visible = R.label.sprite.visible = !st.emote;
     for (const c of [B, R]) c.baseY += ((inBus(c) ? BUS.floorY : 0) - c.baseY) * Math.min(1, dt * 14);   // 버스 계단을 오르내린다
     animateChar(B, dt, time, st.holder === 'beomjun' && !st.transfer && !emo, emo && { ...emo, part: part('beomjun') }, 1);
@@ -1641,8 +1687,10 @@ export async function startGame(o) {
       act = 'open'; label = '쿠폰 보기';
     }
     const onBus = [B, R].some(c => c.boarded || c.path);
-    if (st.emote || busLock) { act = ''; label = ''; }
-    const canTouch = dist < 2.3 && !st.emote && !busLock && !onBus && !st.transfer && (st.mode === 'local' || st.otherOnline);
+    const seated = seatBlend > 0.5;                    // 좌석 시점: 영상을 가리지 않게 버튼을 줄인다
+    root.classList.toggle('seated', seated);
+    if (st.emote || busLock || seated) { act = ''; label = ''; }
+    const canTouch = dist < 2.3 && !st.emote && !busLock && !onBus && !seated && !st.transfer && (st.mode === 'local' || st.otherOnline);
     let sitAct = '';
     if (!st.emote && !busLock && !mine().some(c => c.boarded || c.path)) {
       if (mine().some(c => c.seat < 0 && freeSeatNear(c) >= 0)) sitAct = 'sit';
