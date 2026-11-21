@@ -628,11 +628,11 @@ function buildBusStop(scene) {
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.5, 10), poleM);
   pole.position.set(x1 + 0.35, 1.25, z0 - 0.1); g.add(pole);
   const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.05, 28), std('#2f6fd6'));
-  disc.rotation.x = Math.PI / 2; disc.position.set(x1 + 0.35, 2.55, z0 - 0.1); g.add(disc);
+  disc.rotation.x = Math.PI / 2; disc.position.set(x1 + 0.35, 2.55, z0 - 0.045); g.add(disc);   // 기둥(z0-0.1, 굵기 0.05)보다 앞에
   const face = new THREE.Mesh(new THREE.CircleGeometry(0.36, 28), new THREE.MeshBasicMaterial({ map: plateTex('BUS', '#2f6fd6', '#ffffff', 256, 256, 96) }));
-  face.position.set(x1 + 0.35, 2.55, z0 - 0.07); g.add(face);   // 글씨가 바로 서 보이게 평평한 판에
+  face.position.set(x1 + 0.35, 2.55, z0 - 0.015); g.add(face);   // 글씨가 바로 서 보이게 평평한 판에
   const board = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.26), new THREE.MeshBasicMaterial({ map: plateTex('영화관 행 →', '#1b1d24', '#ffd23f', 512, 148, 66) }));
-  board.position.set(x1 + 0.35, 1.95, z0 - 0.06); g.add(board);
+  board.position.set(x1 + 0.35, 1.95, z0 - 0.015); g.add(board);   // 기둥 앞에 붙여서 글자가 가려지지 않게
   return { setProgress(p) { fill.mesh.geometry.setDrawRange(0, Math.floor(fill.n * clamp(p, 0, 1)) * 6); } };
 }
 
