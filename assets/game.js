@@ -349,11 +349,12 @@ function makeChar(o) {
     });
   }
   const eyeM = new THREE.MeshBasicMaterial({ color: '#1c1614' }), white = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+  const eyes = [], shines = [];
   [-0.12, 0.12].forEach(x => {
     const e = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), eyeM);
-    e.scale.set(1, 1.25, 0.6); e.position.set(x, -0.01, 0.315); head.add(e);
+    e.scale.set(1, 1.25, 0.6); e.position.set(x, -0.01, 0.315); head.add(e); eyes.push(e);
     const hl = new THREE.Mesh(new THREE.SphereGeometry(0.013, 6, 5), white);
-    hl.position.set(x + 0.016, 0.017, 0.343); head.add(hl);
+    hl.position.set(x + 0.016, 0.017, 0.343); head.add(hl); shines.push(hl);
   });
   const blushM = new THREE.MeshBasicMaterial({ color: '#f29aae', transparent: true, opacity: 0.55, depthWrite: false });
   [-0.2, 0.2].forEach(x => {
@@ -362,6 +363,9 @@ function makeChar(o) {
   });
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.011, 6, 12, Math.PI), eyeM);
   mouth.rotation.z = Math.PI; mouth.position.set(0, -0.1, 0.322); head.add(mouth);
+  // 뽀뽀할 때 쭉 내미는 입술
+  const lips = new THREE.Mesh(new THREE.SphereGeometry(0.042, 16, 12), new THREE.MeshStandardMaterial({ color: '#e0607a', roughness: 0.35 }));
+  lips.position.set(0, -0.1, 0.33); lips.visible = false; head.add(lips);
 
   if (o.scarf) {
     const sM = std(o.scarf, { roughness: 1 });
@@ -379,7 +383,7 @@ function makeChar(o) {
   const bubble = makeBubble();
   bubble.sprite.position.y = 2.45; g.add(bubble.sprite);
 
-  return { group: g, rig, head, blushM, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
+  return { group: g, rig, head, blushM, eyes, shines, mouth, lips, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
 }
 
 // emo: { type: 'hug' | 'kiss', w: 0~1 } — 안기·뽀뽀 자세를 w 만큼 섞는다. side: 고개를 기울일 방향(±1)
@@ -389,7 +393,7 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   const s = Math.sin(c.phase) * 0.55 * c.walk;
   c.legL.rotation.x = s; c.legR.rotation.x = -s;
   let lx = holding ? -1.15 : -s * 0.8, rx = holding ? -1.15 : s * 0.8;
-  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55, reach = 1;
+  let lz = holding ? 0.32 : 0.12, rz = holding ? -0.32 : -0.12, lean = 0, tilt = 0, blush = 0.55, reach = 1, pucker = 0;
   if (emo && emo.w > 0) {
     const w = emo.w, mix = (a, b) => a + (b - a) * w;
     if (emo.type === 'hug') {
@@ -401,7 +405,7 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
     } else {
       // 얼굴이 딱 닿을 만큼만 몸을 기울이고(서 있는 거리와 맞춰 계산), 고개는 서로 반대로 갸웃
       lx = mix(lx, -0.5); rx = mix(rx, -0.5); lz = mix(lz, 0.2); rz = mix(rz, -0.2);
-      lean = 0.08 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.4 * w;
+      lean = 0.07 * w; tilt = 0.2 * w * side; blush = 0.55 + 0.4 * w; pucker = w;
     }
   }
   const k = Math.min(1, dt * 12);
@@ -413,6 +417,15 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   c.rig.rotation.x += (lean - c.rig.rotation.x) * k;
   c.head.rotation.z += (tilt - c.head.rotation.z) * k;
   c.blushM.opacity = blush;
+  // 뽀뽀 표정: 웃는 입 대신 입술을 쭉 내밀고, 얼굴이 가까워지면 눈을 감는다
+  const shut = Math.max(0, Math.min(1, (pucker - 0.35) / 0.4));
+  for (const e of c.eyes) e.scale.y = 1.25 - 1.08 * shut;
+  for (const h of c.shines) h.visible = shut < 0.5;
+  const lp = Math.max(0, Math.min(1, (pucker - 0.2) / 0.45));
+  c.mouth.visible = lp < 0.15;
+  c.lips.visible = lp >= 0.15;
+  c.lips.scale.set(1.15 * lp, 0.9 * lp, 1.1 * lp);
+  c.lips.position.z = 0.318 + 0.03 * lp;
   c.rig.position.y = Math.abs(Math.sin(c.phase)) * 0.05 * c.walk + Math.sin(t * 2.2) * 0.008;
   c.group.rotation.y = angLerp(c.group.rotation.y, c.ry, Math.min(1, dt * 12));
 }
@@ -763,7 +776,7 @@ export async function startGame(o) {
   // 안아주기 · 뽀뽀: 누가 눌러도 되고, 각자 폰이면 두 화면에서 같이 나온다
   const hugBtn = q('#game-hug'), kissBtn = q('#game-kiss');
   // gap = 두 사람 사이 거리. 머리 지름이 0.68 이라 안기는 0.7(머리가 겹치지 않게),
-  // 뽀뽀는 0.9 에서 0.08 만큼 기울이면 얼굴 사이가 0.67 → 딱 닿는다
+  // 뽀뽀는 0.9 에서 0.07 만큼 기울이면 머리 중심 사이가 0.70 → 얼굴은 안 닿고 내민 입술끼리 딱 닿는다
   const EMOTE = { hug: { dur: 3.2, gap: 0.7, text: '꼬옥 🤗' }, kiss: { dur: 2.6, gap: 0.9, text: '쪽! 💋' } };
   const constrain = (x, z) => {
     const r = Math.hypot(x, z);
