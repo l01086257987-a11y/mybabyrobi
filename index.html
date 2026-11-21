@@ -121,15 +121,39 @@
 
     <div class="game-invite" id="game-invite" hidden>
       <p class="game-invite-text" id="game-invite-text"></p>
-      <button type="button" class="btn-enter" id="enter-game">게임 입장</button>
+      <button type="button" class="btn-enter" id="enter-game">초대장 열기</button>
     </div>
   </section>
 
 </main>
 
+<!-- 초대장: 촛불을 끄면 밤하늘에서 떠오른다 -->
+<div class="invite" id="invite" hidden>
+  <div class="invite-sky" id="invite-sky" aria-hidden="true"></div>
+  <div class="invite-card" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+    <span class="invite-seal"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5"/><path d="M9.6 4.2 12 6.4l2.4-2.2M9.6 19.8 12 17.6l2.4 2.2M4.4 10.3l3.1-.9-.7-3.2M19.6 13.7l-3.1.9.7 3.2M4.4 13.7l3.1.9-.7 3.2M19.6 10.3l-3.1-.9.7-3.2"/></g></svg></span>
+    <p class="invite-eyebrow"><span>INVITATION</span><span id="invite-no"></span></p>
+    <h2 class="invite-title" id="invite-title"><span class="invite-en" id="invite-en"></span><span class="invite-ko" id="invite-ko"></span></h2>
+    <p class="invite-rule" aria-hidden="true"><span></span></p>
+    <p class="invite-body" id="invite-body"></p>
+    <dl class="invite-meta">
+      <div><dt>초대받은 사람</dt><dd id="invite-guest"></dd></div>
+      <div><dt>기다리는 사람</dt><dd id="invite-host"></dd></div>
+      <div><dt>입장</dt><dd>지금</dd></div>
+    </dl>
+    <button type="button" class="invite-go" id="invite-go"></button>
+    <button type="button" class="invite-later" id="invite-later"></button>
+  </div>
+</div>
+
 <!-- 게임: 눈 내리는 밤 광장 -->
 <div class="game" id="game" hidden>
   <canvas class="game-canvas" id="game-canvas"></canvas>
+  <div class="game-loading" id="game-loading" role="status" aria-live="polite">
+    <span class="gl-flake"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5"/><path d="M9.6 4.2 12 6.4l2.4-2.2M9.6 19.8 12 17.6l2.4 2.2M4.4 10.3l3.1-.9-.7-3.2M19.6 13.7l-3.1.9.7 3.2M4.4 13.7l3.1.9-.7 3.2M19.6 10.3l-3.1-.9.7-3.2"/></g></svg></span>
+    <p class="gl-text">광장으로 들어가는 중…</p>
+    <p class="gl-sub">눈 내리는 밤을 준비하고 있어</p>
+  </div>
   <div class="game-top">
     <button type="button" class="game-btn" id="game-exit">나가기</button>
     <p class="game-status" id="game-status" role="status" aria-live="polite"></p>

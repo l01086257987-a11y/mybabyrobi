@@ -948,7 +948,7 @@ export async function startGame(o) {
 
   // 매 프레임
   const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
-  let running = false, raf = 0, last = 0, time = 0, shownAction = '';
+  let running = false, raf = 0, last = 0, time = 0, shownAction = '', readySent = false;
   function frame(now) {
     raf = running ? requestAnimationFrame(frame) : 0;
     const dt = Math.min(0.1, (now - last) / 1000 || 0.016);
@@ -1081,6 +1081,7 @@ export async function startGame(o) {
     updateCamera(dt, false);
     world.update(dt, camT.x, camT.z);
     renderer.render(scene, camera);
+    if (!readySent) { readySent = true; if (o.onReady) o.onReady(); }
   }
 
   function resume() {

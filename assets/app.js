@@ -442,6 +442,7 @@
     // 선물 · 게임
     if (c.gift) renderGift(c.gift);
     $('#game-invite-text').textContent = (c.game && c.game.invite) || '';
+    renderInvitation(c);
 
     // 크레딧
     const roll = $('#credits-roll');
@@ -773,14 +774,65 @@
     });
   }
 
+  // 촛불을 끄면: 케이크 아래에 '초대장 열기'를 남겨 두고, 밤하늘에서 초대장이 떠오른다
   function showGameInvite() {
-    const inv = $('#game-invite');
-    inv.hidden = false;
-    setTimeout(() => {
-      const y = inv.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.45;
-      window.scrollTo({ top: Math.max(0, y), behavior: reduceMotion ? 'auto' : 'smooth' });
-    }, 80);
+    $('#game-invite').hidden = false;
+    openInvitation();
   }
+
+  /* ---------- 초대장 ---------- */
+  const invite = $('#invite');
+  let skyBuilt = false, prefetched = false;
+  function renderInvitation(c) {
+    const iv = (c.game && c.game.invitation) || {};
+    $('#invite-no').textContent = iv.no || '';
+    $('#invite-en').textContent = iv.en || '';
+    $('#invite-ko').textContent = iv.ko || '';
+    $('#invite-body').textContent = iv.body || '';
+    $('#invite-guest').textContent = (c.her && c.her.name) || 'Robi';
+    $('#invite-host').textContent = (c.game && c.game.me) || 'Beomjun';
+    $('#invite-go').textContent = iv.go || '초대에 응하기';
+    $('#invite-later').textContent = iv.later || '나중에 갈게';
+  }
+  function buildSky() {
+    if (skyBuilt) return;
+    skyBuilt = true;
+    const sky = $('#invite-sky');
+    for (let i = 0; i < 46; i++) {                // 눈송이
+      const f = el('i', 'flake');
+      f.style.cssText = `left:${Math.random() * 100}%;--s:${(2 + Math.random() * 4).toFixed(1)}px;--d:${(7 + Math.random() * 9).toFixed(1)}s;--delay:${(-Math.random() * 16).toFixed(1)}s;--x:${(Math.random() * 60 - 30).toFixed(0)}px;opacity:${(0.35 + Math.random() * 0.6).toFixed(2)}`;
+      sky.append(f);
+    }
+    for (let i = 0; i < 38; i++) {                // 반짝이는 별
+      const s = el('i', 'star');
+      s.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 60}%;--d:${(2 + Math.random() * 3).toFixed(1)}s;--delay:${(-Math.random() * 4).toFixed(1)}s`;
+      sky.append(s);
+    }
+  }
+  function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
+    if (prefetched) return;
+    prefetched = true;
+    import('./game.js').catch(noop);
+    import('./vendor/mqtt.esm.js').catch(noop);
+  }
+  function openInvitation() {
+    buildSky();
+    invite.hidden = false;
+    invite.classList.remove('on');
+    void invite.offsetWidth;
+    invite.classList.add('on');
+    document.body.classList.add('locked');
+    prefetchGame();
+    setTimeout(() => $('#invite-go').focus({ preventScroll: true }), reduceMotion ? 0 : 2600);
+  }
+  function closeInvitation() {
+    invite.classList.remove('on');
+    invite.classList.add('leaving');
+    setTimeout(() => { invite.hidden = true; invite.classList.remove('leaving'); }, reduceMotion ? 0 : 700);
+    document.body.classList.remove('locked');
+  }
+  $('#invite-go').addEventListener('click', () => { closeInvitation(); enterGame('robi'); });
+  $('#invite-later').addEventListener('click', closeInvitation);
 
   async function enterGame(role) {
     const c = state.content || {};
@@ -791,7 +843,10 @@
     if (game) { game.resume(); return; }
     if (gameLoading) return;
     gameLoading = true;
-    $('#game-status').textContent = '광장으로 가는 중…';
+    const loading = $('#game-loading');
+    loading.hidden = false; loading.classList.remove('gone');
+    const doneLoading = () => { loading.classList.add('gone'); setTimeout(() => { loading.hidden = true; }, 700); };
+    $('#game-status').textContent = '';
     try {
       const { startGame } = await import('./game.js');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
@@ -802,10 +857,12 @@
         names: { robi: (c.her && c.her.name) || 'Robi', beomjun: gc.me || 'Beomjun' },
         brokers: broker ? [broker] : null,
         onWantOpen: openGiftSheet,
+        onReady: doneLoading,          // 광장 첫 장면이 그려지면 로딩 화면을 걷는다
         secret: state.pw,
       });
     } catch (e) {
       console.error(e);
+      doneLoading();
       $('#game-status').textContent = '이 기기에서는 3D 광장이 열리지 않아서, 선물을 바로 열어 줄게.';
       openGiftSheet();
     } finally {
@@ -819,7 +876,7 @@
     document.body.classList.remove('locked');
     Petals.start();
   }
-  $('#enter-game').addEventListener('click', () => enterGame('robi'));
+  $('#enter-game').addEventListener('click', openInvitation);
   $('#game-exit').addEventListener('click', exitGame);
   $('#sheet-close').addEventListener('click', () => { sheet.hidden = true; });
 
