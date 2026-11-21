@@ -522,6 +522,7 @@ main { position: relative; z-index: 1; }
   animation: rise .35s ease both;
 }
 .emote-btn span { font-size: 1.45rem; line-height: 1; }
+.emote-btn b { font-weight: 700; }
 .emote-btn:active { transform: scale(.94); }
 
 /* 채팅 */

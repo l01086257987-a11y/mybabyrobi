@@ -177,7 +177,9 @@ function buildWorld(scene) {
 
   // 벤치
   const wood = std('#6b4a35'), iron = std('#2a2c33');
+  const benches = [];
   const benchAt = (x, z, ry) => {
+    benches.push({ x, z, ry });
     const g = new THREE.Group();
     g.position.set(x, 0, z); g.rotation.y = ry;
     add(new THREE.BoxGeometry(1.6, 0.08, 0.5), wood, 0.45, g);
@@ -217,6 +219,7 @@ function buildWorld(scene) {
   scene.add(flakes);
   let t = 0;
   return {
+    benches,
     update(dt, cx, cz) {
       t += dt;
       for (let i = 0; i < N; i++) {
@@ -383,7 +386,7 @@ function makeChar(o) {
   const bubble = makeBubble();
   bubble.sprite.position.y = 2.45; g.add(bubble.sprite);
 
-  return { group: g, rig, head, blushM, eyes, shines, mouth, lips, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '' };
+  return { group: g, rig, head, blushM, eyes, shines, mouth, lips, legL, legR, armL, armR, label, bubble, pos: g.position, ry: 0, moving: false, walk: 0, phase: 0, sub: '', seat: -1, sitW: 0 };
 }
 
 // emo: { type: 'hug' | 'kiss', w: 0~1 } — 안기·뽀뽀 자세를 w 만큼 섞는다. side: 고개를 기울일 방향(±1)
@@ -411,6 +414,9 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
       blush = 0.55 + 0.45 * w; happy = w;
     }
   }
+  c.sitW += ((c.seat >= 0 && !c.moving ? 1 : 0) - c.sitW) * Math.min(1, dt * 6);
+  const sw = c.sitW;
+  if (sw > 0.001) { lx += (-0.55 - lx) * sw; rx += (-0.55 - rx) * sw; lz += (0.2 - lz) * sw; rz += (-0.2 - rz) * sw; }
   const k = Math.min(1, dt * 12);
   const sc = c.armL.scale.y + (reach - c.armL.scale.y) * k;
   c.armL.scale.y = c.armR.scale.y = sc;
@@ -430,9 +436,15 @@ function animateChar(c, dt, t, holding, emo, side = 1) {
   c.lips.scale.set(1.15 * lp, 0.9 * lp, 1.1 * lp);
   c.lips.position.z = 0.318 + 0.03 * lp;
   c.rig.position.y = Math.abs(Math.sin(c.phase)) * 0.05 * c.walk + Math.sin(t * 2.2) * 0.008;
+  if (sw > 0.001) {                                // 벤치에 앉아 발을 동동
+    const kick = Math.sin(t * 3.2) * 0.14;
+    c.legL.rotation.x += (-1.25 + kick - c.legL.rotation.x) * sw;
+    c.legR.rotation.x += (-1.25 - kick - c.legR.rotation.x) * sw;
+  }
+  c.pos.y = 0.13 * sw;                             // 엉덩이를 벤치 높이로
   c.group.rotation.y = angLerp(c.group.rotation.y, c.ry, Math.min(1, dt * 12));
 }
-const handPos = (c, out) => out.set(c.pos.x + Math.sin(c.group.rotation.y) * 0.42, 0.84 + c.rig.position.y, c.pos.z + Math.cos(c.group.rotation.y) * 0.42);
+const handPos = (c, out) => out.set(c.pos.x + Math.sin(c.group.rotation.y) * 0.42, 0.84 + c.rig.position.y + c.pos.y, c.pos.z + Math.cos(c.group.rotation.y) * 0.42);
 
 /* ---------- 선물 ---------- */
 function makeGift() {
@@ -543,6 +555,12 @@ export async function startGame(o) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 140);
   const world = buildWorld(scene);
+  // 2인용 벤치: 벤치마다 왼쪽·오른쪽 자리. 앉으면 벤치 앞쪽(벤치가 바라보는 쪽)을 본다
+  const seats = [];
+  world.benches.forEach(bn => [-0.4, 0.4].forEach(lx => {
+    const lz = 0.04;
+    seats.push({ x: bn.x + lx * Math.cos(bn.ry) + lz * Math.sin(bn.ry), z: bn.z - lx * Math.sin(bn.ry) + lz * Math.cos(bn.ry), ry: bn.ry });
+  }));
 
   const chars = {
     beomjun: makeChar({ name: names.beomjun, coat: '#22252c', hair: '#1b1716', scarf: '#8f8b86', skin: '#f2d0bc' }),
@@ -728,7 +746,7 @@ export async function startGame(o) {
     if (m.k === 'c' && typeof m.c === 'string') {
       unseal(m.c).then(t => showChat(m.r, t)).catch(() => { /* 열쇠가 다르면 무시 */ });
     } else if (m.k === 'p') {
-      st.remote = { x: m.x, z: m.z, ry: m.ry, m: !!m.m };
+      st.remote = { x: m.x, z: m.z, ry: m.ry, m: !!m.m, sit: Number.isInteger(m.sit) ? m.sit : -1 };
       if (m.r === 'beomjun' && m.g === 'robi' && st.holder === 'beomjun') receiveGive();
       if (m.r === 'robi' && m.o && !st.opened) playOpen(false);
     } else if (m.k === 'e') {
@@ -740,7 +758,7 @@ export async function startGame(o) {
   function sendState(force) {
     if (st.mode !== 'online' || !st.net || !st.net.connected) return;
     const me = chars[st.role];
-    const msg = { r: st.role, x: +me.pos.x.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), m: me.moving ? 1 : 0 };
+    const msg = { r: st.role, x: +me.pos.x.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), m: me.moving ? 1 : 0, sit: me.seat };
     if (st.role === 'beomjun') msg.g = st.holder;
     if (st.role === 'robi') msg.o = st.opened ? 1 : 0;
     const sig = JSON.stringify(msg);
@@ -827,6 +845,7 @@ export async function startGame(o) {
     if (st.emote || !E) return;
     const L = layoutEmote(m);
     if (!L) return;
+    for (const c of Object.values(chars)) c.seat = -1;   // 앉아 있었다면 일어나서 한다
     st.emote = { type: m.t, t: 0, dur: E.dur, w: 0, popped: false, ...L };
     joyL.reset(); joyR.reset();
     flash(E.text, E.dur * 1000 + 600);
@@ -839,6 +858,42 @@ export async function startGame(o) {
     const act = actionBtn.dataset.act;
     if (act === 'give') giveGift();
     else if (act === 'open' && o.onWantOpen) o.onWantOpen();
+  });
+
+  // 벤치
+  const SEAT_RANGE = 1.4;
+  const seatTaken = (id, c) => Object.values(chars).some(o => o !== c && o.seat === id);
+  function freeSeatNear(c) {
+    let best = -1, bd = SEAT_RANGE;
+    seats.forEach((s, id) => {
+      const d = Math.hypot(s.x - c.pos.x, s.z - c.pos.z);
+      if (d < bd && !seatTaken(id, c)) { bd = d; best = id; }
+    });
+    return best;
+  }
+  function goSeat(c, dt) {                    // 자리까지 걸어가서, 도착하면 벤치 앞쪽을 본다
+    const s = seats[c.seat], dx = s.x - c.pos.x, dz = s.z - c.pos.z, d = Math.hypot(dx, dz);
+    const step = Math.min(d, SPEED * dt);
+    if (d > 0.001) { c.pos.x += (dx / d) * step; c.pos.z += (dz / d) * step; }
+    c.moving = d > 0.04;
+    c.ry = d > 0.3 ? Math.atan2(dx, dz) : s.ry;
+  }
+  function drive(c, v, dt, otherC) {          // 앉아 있을 때 조이스틱을 움직이면 일어난다
+    if (c.seat >= 0) {
+      if (Math.hypot(v.x, v.y) > 0.35) c.seat = -1;
+      else { goSeat(c, dt); return; }
+    }
+    move(c, v, dt, otherC);
+  }
+  const sitBtn = q('#game-sit'), sitLbl = q('#game-sit-label');
+  const mine = () => (st.mode === 'local' ? [chars.beomjun, chars.robi] : [chars[st.role]]);
+  sitBtn.addEventListener('click', () => {
+    if (sitBtn.dataset.act === 'sit') {
+      for (const c of mine()) if (c.seat < 0) { const id = freeSeatNear(c); if (id >= 0) c.seat = id; }
+    } else {
+      for (const c of mine()) c.seat = -1;
+    }
+    sendState(true);
   });
 
   // 움직임
@@ -922,22 +977,27 @@ export async function startGame(o) {
     if (st.mode === 'local') {
       const vb = joyL.v.x || joyL.v.y ? joyL.v : keyVec('w', 's', 'a', 'd');
       const vr = joyR.v.x || joyR.v.y ? joyR.v : keyVec('arrowup', 'arrowdown', 'arrowleft', 'arrowright');
-      if (!em) { move(B, vb, dt, R); move(R, vr, dt, B); }
+      if (!em) { drive(B, vb, dt, R); drive(R, vr, dt, B); }
     } else {
       const me = chars[st.role], them = chars[other[st.role]];
       const kv = keyVec('w', 's', 'a', 'd'), ka = keyVec('arrowup', 'arrowdown', 'arrowleft', 'arrowright');
       const v = joyL.v.x || joyL.v.y ? joyL.v : { x: kv.x || ka.x, y: kv.y || ka.y };
-      if (!em) move(me, v, dt, them);
+      if (!em) drive(me, v, dt, them);
       const was = st.otherOnline;
       st.otherOnline = now - st.otherSeen < 8000 && st.otherSeen > 0; // 잠깐 끊겨도 바로 나간 걸로 보지 않는다
       if (st.otherOnline && !was && !em) flash(`${names[other[st.role]]} 들어왔어!`);
       if (st.otherOnline !== was) updateLabels();
       if (st.remote && !em) {
-        const kk = 1 - Math.exp(-dt * 12);
-        them.pos.x += (st.remote.x - them.pos.x) * kk;
-        them.pos.z += (st.remote.z - them.pos.z) * kk;
-        them.ry = st.remote.ry;
-        them.moving = !!st.remote.m || Math.hypot(st.remote.x - them.pos.x, st.remote.z - them.pos.z) > 0.05;
+        them.seat = st.remote.sit >= 0 && seats[st.remote.sit] ? st.remote.sit : -1;
+        if (them.seat >= 0 && them.seat === me.seat && st.role === 'beomjun') me.seat ^= 1; // 같은 자리면 Beomjun이 옆자리로
+        if (them.seat >= 0) goSeat(them, dt);
+        else {
+          const kk = 1 - Math.exp(-dt * 12);
+          them.pos.x += (st.remote.x - them.pos.x) * kk;
+          them.pos.z += (st.remote.z - them.pos.z) * kk;
+          them.ry = st.remote.ry;
+          them.moving = !!st.remote.m || Math.hypot(st.remote.x - them.pos.x, st.remote.z - them.pos.z) > 0.05;
+        }
       }
       st.sendAcc += dt; st.idleAcc += dt;
       if (st.sendAcc > 1 / 12) { st.sendAcc = 0; sendState(false); }
@@ -1004,11 +1064,17 @@ export async function startGame(o) {
     }
     if (st.emote) { act = ''; label = ''; }
     const canTouch = dist < 2.3 && !st.emote && !st.transfer && (st.mode === 'local' || st.otherOnline);
-    const sig = act + label + (canTouch ? '+touch' : '');
+    let sitAct = '';
+    if (!st.emote) {
+      if (mine().some(c => c.seat < 0 && freeSeatNear(c) >= 0)) sitAct = 'sit';
+      else if (mine().some(c => c.seat >= 0)) sitAct = 'stand';
+    }
+    const sig = act + label + (canTouch ? '+touch' : '') + sitAct;
     if (sig !== shownAction) {
       shownAction = sig;
       actionBtn.hidden = !act; actionBtn.dataset.act = act; actionBtn.textContent = label;
       hugBtn.hidden = !canTouch; kissBtn.hidden = !canTouch;
+      sitBtn.hidden = !sitAct; sitBtn.dataset.act = sitAct; sitLbl.textContent = sitAct === 'stand' ? '일어나기' : '앉기';
     }
 
     renderStatus(now);
