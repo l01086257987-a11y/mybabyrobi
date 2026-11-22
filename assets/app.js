@@ -334,7 +334,8 @@
   /* ---------- 입장 ---------- */
   const gate = $('#gate'), ticket = $('#ticket'), form = $('#gate-form'), input = $('#gate-input'), gateBtn = $('#gate-btn'), gateMsg = $('#gate-msg');
   const film = $('#film'), opening = $('#opening');
-  const audio = $('#music'), musicBtn = $('#music-btn');
+  let audio = $('#music');                         // 아이폰에서 굳어 버리면 새 오디오로 갈아 끼우므로 let
+  const musicBtn = $('#music-btn');
   const say = t => { gateMsg.textContent = t; };
 
   function shake() {
@@ -749,9 +750,33 @@
    * 아이폰은 audio.volume 을 바꿀 수 없고 Web Audio 는 무음 모드에서 소리가 안 나서,
    * 그냥 <audio> 로 틀고 영상이 나오면 바로 멈췄다가 다시 튼다. */
   const DUCK = { meet: 0, screen: 0 };
-  const music = { level: 1, ducks: new Map(), timer: 0, blocked: false };
+  const music = { level: 1, ducks: new Map(), timer: 0, blocked: false, stuck: false, spares: [] };
   function primeMusic() {                          // 사용자가 탭한 순간에만 부른다 (아이폰은 이때 깨운 오디오만 나중에 틀 수 있다)
-    if (!audio.src) { audio.src = silentWav(); audio.play().catch(noop); }
+    if (!audio.src) {
+      audio.src = silentWav(); audio.play().catch(noop);
+      // 아이폰: 다른 앱에 다녀온 뒤 오디오가 굳으면 갈아 끼울 여분도 지금(탭한 순간) 깨워 둔다
+      if (!canSetVolume) for (let i = 0; i < 2; i++) {
+        const a = new Audio();
+        a.preload = 'auto'; a.src = silentWav(); a.play().catch(noop);
+        music.spares.push(a);
+      }
+    }
+  }
+  // 아이폰: 멈춘 채 풀리지 않는 오디오를 새 오디오로 바꿔, 듣던 자리부터 이어서 튼다
+  function swapMusicElement(el) {
+    const old = audio, t = old.currentTime || 0;
+    el.preload = 'auto'; el.loop = true;
+    el.addEventListener('loadedmetadata', () => { try { if (t > 0 && t < el.duration) el.currentTime = t; } catch { /* 처음부터 */ } }, { once: true });
+    el.src = state.musicURL;
+    try { old.pause(); } catch { /* 무시 */ }
+    old.removeAttribute('id'); el.id = 'music';
+    if (old.isConnected) old.replaceWith(el); else document.body.append(el);
+    audio = el;
+    music.stuck = false;                           // 한 번 탭에 터치·클릭이 여러 번 와도 한 번만 갈아 끼운다
+    el.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
+    setTimeout(() => {                             // 그래도 안 나오면 다음 탭에서 다시
+      if (audio === el && el.paused && !document.hidden && musicTarget() > 0) music.stuck = true;
+    }, 2500);
   }
   const canFade = () => canSetVolume;
   function setMusicLevel(v) {
@@ -818,12 +843,31 @@
     syncMusic();
   });
   // 처음 재생이 막혔거나 멈춰 있으면(자동 재생 제한) 다음에 화면을 만지는 순간 튼다
-  const onAnyTouch = () => { if (musicTarget() > 0 && (music.blocked || !musicPlaying())) syncMusic(); };
+  const onAnyTouch = () => {
+    if (musicTarget() <= 0) return;
+    if (!canFade() && music.stuck) { swapMusicElement(new Audio()); return; }   // 아이폰: 굳은 오디오는 탭한 순간 새것으로
+    if (music.blocked || !musicPlaying()) syncMusic();
+  };
   for (const ev of ['touchend', 'click', 'pointerup', 'keydown']) document.addEventListener(ev, onAnyTouch, true);
   document.addEventListener('visibilitychange', syncMusic);
   // 앱에 돌아왔는데 노래가 멈춰 있으면: 바로, 그리고 조금 뒤에 한 번 더 틀어 본다 (막히면 다음 탭에서 튼다)
   // (아이폰만. 컴퓨터·안드로이드는 위의 visibilitychange 하나로 지금처럼 디졸브로 돌아온다)
-  const onBack = () => { if (document.hidden || canFade()) return; syncMusic(); setTimeout(syncMusic, 500); setTimeout(syncMusic, 1500); };
+  let backTimer = 0;
+  const onBack = () => {
+    if (document.hidden || canFade()) return;
+    syncMusic(); setTimeout(syncMusic, 500); setTimeout(syncMusic, 1500);
+    // 2.5초 뒤에도 노래가 흘러가지 않으면(아이폰이 오디오를 굳혀 버린 경우) 여분 오디오로 갈아 끼운다
+    const el = audio, t0 = el.currentTime;
+    clearTimeout(backTimer);
+    backTimer = setTimeout(() => {
+      if (document.hidden || musicTarget() <= 0 || audio !== el) return;
+      const now = el.currentTime, moved = now > t0 + 0.3 || now + 1 < t0;   // 반복해서 처음으로 돌아간 경우도 흘러간 것
+      if (!el.paused && moved) return;
+      music.stuck = true;                          // 여분도 안 되면 다음 탭에서 새 오디오로
+      const spare = music.spares.shift();
+      if (spare) swapMusicElement(spare);
+    }, 2500);
+  };
   document.addEventListener('visibilitychange', onBack);
   window.addEventListener('pageshow', onBack);
   window.addEventListener('focus', onBack);
@@ -956,7 +1000,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js?v=1122a').catch(noop);
+    import('./game.js?v=1122b').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -1001,7 +1045,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js?v=1122a');
+      const { startGame } = await import('./game.js?v=1122b');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,
