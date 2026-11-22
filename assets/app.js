@@ -769,7 +769,13 @@
     if (!state.musicURL) return;
     clearInterval(music.timer);
     const to = musicTarget();
-    if (to === 0 && document.hidden) { audio.pause(); return; }      // 다른 앱으로 가면 바로 멈춤
+    if (document.hidden) {                         // 다른 앱으로 갔을 때
+      // 컴퓨터·안드로이드: 바로 멈췄다가 돌아오면 다시 튼다.
+      // 아이폰: 직접 멈추지 않는다. 직접 멈추면 돌아왔을 때 다시 못 트는 일이 있어서,
+      // 아이폰이 알아서 멈췄다가 돌아오면 다시 틀어 주도록 맡긴다.
+      if (canFade()) audio.pause();
+      return;
+    }
     if (!canFade()) {                              // 아이폰: 줄이지 못하니 바로 멈추거나 튼다
       if (to === 0) audio.pause();
       else if (audio.paused) audio.play().then(() => { music.blocked = false; }, () => { music.blocked = true; });
@@ -815,6 +821,12 @@
   const onAnyTouch = () => { if (musicTarget() > 0 && (music.blocked || !musicPlaying())) syncMusic(); };
   for (const ev of ['touchend', 'click', 'pointerup', 'keydown']) document.addEventListener(ev, onAnyTouch, true);
   document.addEventListener('visibilitychange', syncMusic);
+  // 앱에 돌아왔는데 노래가 멈춰 있으면: 바로, 그리고 조금 뒤에 한 번 더 틀어 본다 (막히면 다음 탭에서 튼다)
+  // (아이폰만. 컴퓨터·안드로이드는 위의 visibilitychange 하나로 지금처럼 디졸브로 돌아온다)
+  const onBack = () => { if (document.hidden || canFade()) return; syncMusic(); setTimeout(syncMusic, 500); setTimeout(syncMusic, 1500); };
+  document.addEventListener('visibilitychange', onBack);
+  window.addEventListener('pageshow', onBack);
+  window.addEventListener('focus', onBack);
 
   /* ---------- 스크롤 등장 · 카운터 ---------- */
   function setupReveals() {
@@ -944,7 +956,7 @@
   function prefetchGame() {                       // 초대장을 읽는 동안 광장 파일을 미리 받아 둔다
     if (prefetched) return;
     prefetched = true;
-    import('./game.js?v=1121h').catch(noop);
+    import('./game.js?v=1122a').catch(noop);
     import('./vendor/mqtt.esm.js').catch(noop);
   }
   function openInvitation() {
@@ -989,7 +1001,7 @@
     }, Math.max(0, MIN_LOADING - (performance.now() - t0)));
     $('#game-status').textContent = '';
     try {
-      const { startGame } = await import('./game.js?v=1121h');
+      const { startGame } = await import('./game.js?v=1122a');
       const broker = new URLSearchParams(location.search).get('broker'); // 테스트용
       game = await startGame({
         root: gameEl,
